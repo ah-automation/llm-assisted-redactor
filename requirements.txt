@@ -1,3 +1,5 @@
 pillow
 pyyaml
 openai
+rapidocr
+onnxruntime

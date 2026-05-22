@@ -11,9 +11,19 @@ from openai import OpenAI
 from PIL import Image, ImageDraw
 
 
-def load_config(config_path):
-    with open(config_path, "r", encoding="utf-8") as file:
+class VlmResponseError(Exception):
+    def __init__(self, message, raw_response):
+        super().__init__(message)
+        self.raw_response = raw_response
+
+
+def load_yaml(path):
+    with open(path, "r", encoding="utf-8") as file:
         return yaml.safe_load(file)
+
+
+def load_config(config_path):
+    return load_yaml(config_path)
 
 
 def image_to_data_url(image_path):
@@ -26,22 +36,22 @@ def image_to_data_url(image_path):
     return f"data:image/png;base64,{encoded}"
 
 
-def build_prompt(pii_targets, image_width, image_height):
+def join_text_items(items):
+    if isinstance(items, list):
+        return "; ".join(str(item) for item in items)
+    return str(items or "")
+
+
+def build_config_prompt(pii_targets, image_width, image_height):
     target_lines = []
     for target in pii_targets:
-        hints = target.get("hints", [])
-        if isinstance(hints, list):
-            hints_text = "; ".join(str(hint) for hint in hints)
-        else:
-            hints_text = str(hints)
-
         target_lines.append(
             "\n".join(
                 [
                     f"- id: {target.get('id')}",
                     f"  label: {target.get('label')}",
                     f"  description: {target.get('description')}",
-                    f"  hints: {hints_text}",
+                    f"  hints: {join_text_items(target.get('hints', []))}",
                 ]
             )
         )
@@ -72,7 +82,38 @@ def build_prompt(pii_targets, image_width, image_height):
     )
 
 
-def call_vlm(config, image_path, image_width, image_height):
+def build_document_field_prompt(document_definition, field, image_width, image_height):
+    return (
+        "Return the final JSON immediately. Do not explain your work.\n"
+        "Do not reason step by step. Do not describe or transcribe text from the image.\n"
+        f"The image size is {image_width} pixels wide by {image_height} pixels tall.\n"
+        "Use pixel coordinates from this exact image size.\n"
+        "Coordinate origin is the top-left corner: x increases to the right, y increases downward.\n"
+        "Return boxes around the requested field value only unless instructed otherwise.\n"
+        "Use tight boxes with only small padding.\n"
+        "Do not include actual PII text values in the response.\n\n"
+        f"Document type: {document_definition.get('label')}\n"
+        f"Document description: {document_definition.get('description')}\n"
+        f"Document hints: {join_text_items(document_definition.get('document_hints', []))}\n\n"
+        "Locate only this one configured field:\n"
+        f"- id: {field.get('id')}\n"
+        f"  label: {field.get('label')}\n"
+        f"  description: {field.get('description')}\n"
+        f"  anchors: {join_text_items(field.get('anchors', []))}\n"
+        f"  location_hints: {join_text_items(field.get('location_hints', []))}\n"
+        f"  redact_instruction: {field.get('redact_instruction')}\n\n"
+        "If the field appears more than once, return one detection for each appearance.\n"
+        "If this field is not visible, return {\"boxes\": []}.\n"
+        "Return only valid JSON. Do not include markdown or explanations.\n"
+        "Use this exact shape:\n"
+        '{ "boxes": ['
+        f'{{ "target_id": "{field.get("id")}", "x1": 0, "y1": 0, "x2": 100, "y2": 50 }}'
+        "] }\n"
+        "Every returned target_id must exactly match the configured field id."
+    )
+
+
+def call_vlm(config, image_path, prompt):
     vlm_config = config["vlm"]
     client = OpenAI(
         base_url=vlm_config["base_url"],
@@ -97,7 +138,7 @@ def call_vlm(config, image_path, image_width, image_height):
                 "content": [
                     {
                         "type": "text",
-                        "text": build_prompt(config["pii_targets"], image_width, image_height),
+                        "text": prompt,
                     },
                     {
                         "type": "image_url",
@@ -246,42 +287,93 @@ def make_run_paths(config, image_path):
     logs_dir.mkdir(parents=True, exist_ok=True)
 
     output_path = output_dir / f"{image_stem}-redacted-{timestamp}.png"
+    debug_path = output_dir / f"{image_stem}-debug-{timestamp}.png"
     log_path = logs_dir / f"{image_stem}-manifest-{timestamp}.json"
-    return output_path, log_path
+    return output_path, debug_path, log_path
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Redact PII from one image using a local VLM.")
-    parser.add_argument("--image", required=True, help="Path to one image file.")
-    parser.add_argument("--config", default="config.yaml", help="Path to config.yaml.")
-    args = parser.parse_args()
+def draw_box_label(draw, box):
+    label = box["target_id"]
+    x1 = box["x1"]
+    y1 = box["y1"]
+    text_top = max(0, y1 - 14)
+    draw.rectangle([x1, text_top, x1 + 8 * len(label) + 6, text_top + 13], fill="black")
+    draw.text((x1 + 3, text_top), label, fill="white")
 
-    image_path = Path(args.image)
-    config_path = Path(args.config)
 
-    config = load_config(config_path)
-    output_path, log_path = make_run_paths(config, image_path)
+def save_debug_overlay(image_path, debug_path, boxes):
+    with Image.open(image_path) as image:
+        overlay = image.convert("RGB")
+        draw = ImageDraw.Draw(overlay)
+        for box in boxes:
+            draw.rectangle(
+                [box["x1"], box["y1"], box["x2"], box["y2"]],
+                outline="red",
+                width=3,
+            )
+            draw_box_label(draw, box)
+        overlay.save(debug_path)
 
-    manifest = {
-        "image": str(image_path),
-        "config": str(config_path),
-        "output": str(output_path),
-        "model": config.get("vlm", {}).get("model"),
-        "created_at": datetime.now().isoformat(timespec="seconds"),
-        "status": "started",
+
+def locate_with_config_targets(config, image_path, image_width, image_height):
+    prompt = build_config_prompt(config["pii_targets"], image_width, image_height)
+    raw_response, vlm_diagnostic = call_vlm(config, image_path, prompt)
+    try:
+        boxes = parse_boxes(raw_response)
+    except (json.JSONDecodeError, ValueError) as error:
+        raise VlmResponseError(str(error), raw_response) from error
+
+    target_ids = get_target_ids(config["pii_targets"])
+    valid_boxes, rejected_boxes = validate_boxes(boxes, image_width, image_height, target_ids)
+
+    return {
+        "valid_boxes": valid_boxes,
+        "rejected_boxes": rejected_boxes,
+        "vlm_diagnostic": vlm_diagnostic,
     }
 
-    try:
-        with Image.open(image_path) as image:
-            image_width, image_height = image.size
 
-        target_ids = get_target_ids(config["pii_targets"])
-        raw_response, vlm_diagnostic = call_vlm(config, image_path, image_width, image_height)
-        manifest["vlm_diagnostic"] = vlm_diagnostic
+def locate_with_document_definition(config, document_definition, image_path, image_width, image_height):
+    valid_boxes = []
+    rejected_boxes = []
+    field_results = []
+
+    for field in document_definition.get("fields", []):
+        field_id = field.get("id")
+        prompt = build_document_field_prompt(document_definition, field, image_width, image_height)
+        raw_response, vlm_diagnostic = call_vlm(config, image_path, prompt)
+
+        field_result = {
+            "field_id": field_id,
+            "vlm_diagnostic": vlm_diagnostic,
+            "status": "started",
+        }
+
         try:
             boxes = parse_boxes(raw_response)
+            field_valid_boxes, field_rejected_boxes = validate_boxes(
+                boxes,
+                image_width,
+                image_height,
+                {field_id},
+            )
+            valid_boxes.extend(field_valid_boxes)
+            rejected_boxes.extend(
+                {
+                    "field_id": field_id,
+                    **rejected_box,
+                }
+                for rejected_box in field_rejected_boxes
+            )
+            field_result.update(
+                {
+                    "status": "completed",
+                    "valid_box_count": len(field_valid_boxes),
+                    "rejected_box_count": len(field_rejected_boxes),
+                }
+            )
         except (json.JSONDecodeError, ValueError) as error:
-            manifest.update(
+            field_result.update(
                 {
                     "status": "vlm_response_error",
                     "error": "VLM response was not valid JSON in the expected shape.",
@@ -289,10 +381,82 @@ def main():
                     "raw_response": raw_response,
                 }
             )
+
+        field_results.append(field_result)
+
+    return {
+        "valid_boxes": valid_boxes,
+        "rejected_boxes": rejected_boxes,
+        "field_results": field_results,
+    }
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Redact PII from one image using a local VLM.")
+    parser.add_argument("--image", required=True, help="Path to one image file.")
+    parser.add_argument("--config", default="config.yaml", help="Path to config.yaml.")
+    parser.add_argument(
+        "--document-definition",
+        help="Optional YAML document definition for document-aware field localization.",
+    )
+    args = parser.parse_args()
+
+    image_path = Path(args.image)
+    config_path = Path(args.config)
+    document_definition_path = Path(args.document_definition) if args.document_definition else None
+
+    config = load_config(config_path)
+    document_definition = load_yaml(document_definition_path) if document_definition_path else None
+    output_path, debug_path, log_path = make_run_paths(config, image_path)
+
+    manifest = {
+        "image": str(image_path),
+        "config": str(config_path),
+        "output": str(output_path),
+        "debug_overlay": str(debug_path),
+        "model": config.get("vlm", {}).get("model"),
+        "created_at": datetime.now().isoformat(timespec="seconds"),
+        "status": "started",
+    }
+    if document_definition_path:
+        manifest["document_definition"] = str(document_definition_path)
+        manifest["document_type"] = document_definition.get("id")
+
+    try:
+        with Image.open(image_path) as image:
+            image_width, image_height = image.size
+
+        try:
+            if document_definition:
+                result = locate_with_document_definition(
+                    config,
+                    document_definition,
+                    image_path,
+                    image_width,
+                    image_height,
+                )
+            else:
+                result = locate_with_config_targets(config, image_path, image_width, image_height)
+        except VlmResponseError as error:
+            manifest.update(
+                {
+                    "status": "vlm_response_error",
+                    "error": "VLM response was not valid JSON in the expected shape.",
+                    "error_details": str(error),
+                    "raw_response": error.raw_response,
+                }
+            )
             print(f"VLM response was malformed. Saved log: {log_path}")
             return
 
-        valid_boxes, rejected_boxes = validate_boxes(boxes, image_width, image_height, target_ids)
+        valid_boxes = result["valid_boxes"]
+        rejected_boxes = result["rejected_boxes"]
+        if "vlm_diagnostic" in result:
+            manifest["vlm_diagnostic"] = result["vlm_diagnostic"]
+        if "field_results" in result:
+            manifest["field_results"] = result["field_results"]
+
+        save_debug_overlay(image_path, debug_path, valid_boxes)
         redact_image(image_path, output_path, valid_boxes)
 
         manifest.update(
