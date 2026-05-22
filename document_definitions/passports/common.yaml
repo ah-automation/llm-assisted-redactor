@@ -1,6 +1,6 @@
 id: "passport.common"
 label: "Passport"
-description: "Common fields for passport biographical data pages."
+description: "Common OCR text fields for passport biographical data pages."
 
 fragment_tags:
   mrz:
@@ -12,48 +12,34 @@ fragment_tags:
     text_contains:
       - "passport no"
       - "passport number"
-      - "documentno"
-      - "document no"
-      - "no.dudocument"
       - "surname"
       - "family name"
       - "last name"
       - "given names"
       - "given name"
-      - "givennames"
       - "first name"
-      - "nombres"
       - "nationality"
-      - "nationalite"
-      - "nationaliteit"
       - "date of birth"
-      - "dateofbirth"
       - "dob"
-      - "geboortedatum"
       - "place of birth"
-      - "placeofbirth"
-      - "geboorteplaats"
       - "sex"
-      - "sexe"
-      - "sexo"
-      - "geslacht"
       - "height"
-      - "length"
-      - "lengte"
-      - "taille"
       - "date of issue"
-      - "dateof issue"
-      - "datumvanafgifte"
-      - "date de delivrance"
-      - "datededelivrance"
+      - "issue date"
       - "date of expiry"
-      - "dateof expiry"
+      - "expiry date"
       - "date of expiration"
       - "expiration"
-      - "expiry"
-      - "geldig tot"
+
+candidate_defaults:
+  window:
+    left: 0
+    right: 0.08
+    above: 0
+    below: 0.06
 
 field_defaults:
+  max_value_fragments: 1
   excluded_fragment_tags:
     - "mrz"
     - "field_label"
@@ -68,7 +54,7 @@ fields:
       - "Passport No"
       - "Passport number"
     match_hints:
-      - "Short alphanumeric value near the passport number label."
+      - "Use the document number value near the passport number label."
     redaction:
       mode: "ocr_box"
 
@@ -93,7 +79,6 @@ fields:
       - "Given names"
       - "Given name"
       - "First name"
-      - "Nombres"
     match_hints:
       - "Use the visible printed value near the given names label."
     redaction:
@@ -109,11 +94,9 @@ fields:
       - "Nationality"
     match_hints:
       - "Use the printed nationality value near the nationality label."
-      - "Do not include the separate issuing country code field as a nationality value."
+      - "Do not include a separate issuing country code field as a nationality value."
     redaction:
       mode: "ocr_box"
-      trim_leading_token_lengths:
-        - 3
 
   date_of_birth:
     label: "Date of birth"
@@ -124,7 +107,7 @@ fields:
       - "Date of birth"
       - "DOB"
     match_hints:
-      - "Date value near the birth date label."
+      - "Use the date value near the birth date label."
     redaction:
       mode: "ocr_box"
 
@@ -144,15 +127,11 @@ fields:
     label: "Height"
     type: "text"
     required: false
-    description: "The holder's height."
+    description: "The holder's height, when present."
     anchors:
       - "Height"
-      - "Length"
-      - "Lengte"
-      - "Taille"
     match_hints:
       - "Usually a short measurement value near the height label."
-      - "May include centimeters or a numeric value."
     redaction:
       mode: "ocr_box"
 
@@ -185,6 +164,7 @@ fields:
     anchors:
       - "Date of expiry"
       - "Expiry date"
+      - "Date of expiration"
     redaction:
       mode: "ocr_box"
 
@@ -192,6 +172,7 @@ fields:
     label: "Machine-readable zone"
     type: "mrz"
     required: true
+    max_value_fragments: 99
     excluded_fragment_tags: []
     description: "The machine-readable zone containing passport data."
     anchors:

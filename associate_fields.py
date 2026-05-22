@@ -49,6 +49,24 @@ def apply_field_overrides(document_definition):
 
     document_definition["fields"] = fields
     document_definition.pop("field_overrides", None)
+    return apply_additions(document_definition)
+
+
+def extend_list(target, key, additions_key):
+    additions = target.pop(additions_key, [])
+    if additions:
+        target[key] = list(target.get(key, [])) + list(additions)
+
+
+def apply_additions(document_definition):
+    for tag_rule in (document_definition.get("fragment_tags") or {}).values():
+        extend_list(tag_rule, "text_contains", "text_contains_add")
+
+    for field in fields_to_map(document_definition.get("fields", {})).values():
+        extend_list(field, "anchors", "anchors_add")
+        extend_list(field, "match_hints", "match_hints_add")
+        extend_list(field, "excluded_fragment_tags", "excluded_fragment_tags_add")
+
     return document_definition
 
 
@@ -142,6 +160,105 @@ def compact_fragments(document_definition, ocr_manifest):
     return fragments
 
 
+def normalized_text(text):
+    return "".join(character for character in str(text or "").casefold() if character.isalnum())
+
+
+def text_matches_anchor(text, anchor):
+    text_key = normalized_text(text)
+    anchor_key = normalized_text(anchor)
+    return bool(anchor_key and anchor_key in text_key)
+
+
+def get_candidate_window(document_definition, field):
+    return field.get("candidate_window") or (document_definition.get("candidate_defaults") or {}).get("window")
+
+
+def expanded_box(box, window, image_width, image_height):
+    return {
+        "x1": box["x1"] - window.get("left", 0) * image_width,
+        "y1": box["y1"] - window.get("above", 0) * image_height,
+        "x2": box["x2"] + window.get("right", 0) * image_width,
+        "y2": box["y2"] + window.get("below", 0) * image_height,
+    }
+
+
+def point_inside_box(point, box):
+    x, y = point
+    return box["x1"] <= x <= box["x2"] and box["y1"] <= y <= box["y2"]
+
+
+def find_anchor_fragments(field, fragments):
+    anchors = field.get("anchors", [])
+    anchor_fragments = []
+    for fragment in fragments:
+        text = fragment.get("text", "")
+        if any(text_matches_anchor(text, anchor) for anchor in anchors):
+            anchor_fragments.append(fragment)
+    return anchor_fragments
+
+
+def filter_candidate_fragments(document_definition, field, ocr_manifest):
+    fragments = ocr_manifest.get("fragments", [])
+    image_size = ocr_manifest.get("image_size", {})
+    image_width = image_size.get("width")
+    image_height = image_size.get("height")
+
+    if field.get("type") == "mrz":
+        tagged_fragments = [
+            fragment
+            for fragment in fragments
+            if "mrz" in get_fragment_tags(document_definition, fragment)
+        ]
+        return tagged_fragments or fragments, {
+            "strategy": "tagged_mrz",
+            "anchor_fragment_ids": [],
+            "candidate_fragment_count": len(tagged_fragments or fragments),
+        }
+
+    window = get_candidate_window(document_definition, field)
+    anchor_fragments = find_anchor_fragments(field, fragments)
+    if not window or not anchor_fragments or not image_width or not image_height:
+        return fragments, {
+            "strategy": "all_fragments",
+            "anchor_fragment_ids": [fragment.get("id") for fragment in anchor_fragments],
+            "candidate_fragment_count": len(fragments),
+        }
+
+    candidate_ids = {fragment.get("id") for fragment in anchor_fragments}
+    search_boxes = [
+        expanded_box(fragment["box"], window, image_width, image_height)
+        for fragment in anchor_fragments
+        if isinstance(fragment.get("box"), dict)
+    ]
+
+    for fragment in fragments:
+        box = fragment.get("box")
+        if not isinstance(box, dict):
+            continue
+        if any(point_inside_box(box_center(box), search_box) for search_box in search_boxes):
+            candidate_ids.add(fragment.get("id"))
+
+    candidate_fragments = [
+        fragment
+        for fragment in fragments
+        if fragment.get("id") in candidate_ids
+    ]
+    return candidate_fragments, {
+        "strategy": "candidate_window",
+        "window": window,
+        "anchor_fragment_ids": [fragment.get("id") for fragment in anchor_fragments],
+        "candidate_fragment_count": len(candidate_fragments),
+    }
+
+
+def make_candidate_manifest(ocr_manifest, candidate_fragments):
+    candidate_manifest = dict(ocr_manifest)
+    candidate_manifest["fragments"] = candidate_fragments
+    candidate_manifest["fragment_count"] = len(candidate_fragments)
+    return candidate_manifest
+
+
 def build_association_prompt(document_definition, ocr_manifest):
     request = {
         "document": {
@@ -209,6 +326,7 @@ def build_field_association_prompt(document_definition, field, ocr_manifest):
         "Do not transcribe or correct any PII values.\n"
         "Use OCR fragment ids only.\n"
         "Choose the OCR fragments that contain the field value.\n"
+        "The provided OCR fragments have already been filtered to nearby candidates when anchors were found.\n"
         "Anchor fragments are optional and should be labels/headings near the value.\n"
         "If the field lists excluded_fragment_tags, do not choose value fragments with those tags.\n"
         "If max_value_fragments is set, choose no more than that many value fragments.\n"
@@ -339,11 +457,14 @@ def associate_fields(config, document_definition, ocr_manifest):
 
     for field in iter_fields(document_definition):
         field_id = field.get("id")
-        prompt = build_field_association_prompt(document_definition, field, ocr_manifest)
+        candidate_fragments, candidate_info = filter_candidate_fragments(document_definition, field, ocr_manifest)
+        candidate_manifest = make_candidate_manifest(ocr_manifest, candidate_fragments)
+        prompt = build_field_association_prompt(document_definition, field, candidate_manifest)
         raw_response, diagnostic = call_llm(config, prompt)
         field_result = {
             "field_id": field_id,
             "llm_diagnostic": diagnostic,
+            "candidate_selection": candidate_info,
             "status": "started",
         }
 
@@ -430,7 +551,13 @@ def limit_value_fragments(value_ids, anchor_ids, field, fragments_by_id):
             return (0, value_ids.index(fragment_id))
 
         nearest_anchor_distance = min(box_distance(fragment_box, anchor_box) for anchor_box in anchor_boxes)
-        return (nearest_anchor_distance, value_ids.index(fragment_id))
+        fragment_center_y = box_center(fragment_box)[1]
+        nearest_anchor_center_y = min(
+            box_center(anchor_box)[1]
+            for anchor_box in anchor_boxes
+        )
+        is_above_anchor = fragment_center_y < nearest_anchor_center_y
+        return (is_above_anchor, nearest_anchor_distance, value_ids.index(fragment_id))
 
     return sorted(value_ids, key=sort_key)[:max_value_fragments]
 

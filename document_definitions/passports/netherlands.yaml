@@ -1,0 +1,94 @@
+extends: "common.yaml"
+
+id: "passport.netherlands"
+label: "Netherlands passport"
+description: "Netherlands passport biographical data page."
+
+document_hints:
+  - "Netherlands passports may include Dutch, English, and French labels."
+
+fragment_tags:
+  field_label:
+    text_contains_add:
+      - "documentnummer"
+      - "documentno"
+      - "no.dudocument"
+      - "naam"
+      - "voornamen"
+      - "givennames"
+      - "prenoms"
+      - "nationaliteit"
+      - "nationalite"
+      - "geboortedatum"
+      - "dateofbirth"
+      - "datedenaissance"
+      - "geboorteplaats"
+      - "lieu de naissance"
+      - "geslacht"
+      - "sexe"
+      - "lengte"
+      - "taille"
+      - "datumvanafgifte"
+      - "dateof issue"
+      - "datededelivrance"
+      - "geldig tot"
+      - "date d'expiration"
+
+field_overrides:
+  passport_number:
+    anchors_add:
+      - "Documentnummer"
+      - "Document no"
+      - "No du document"
+
+  surname:
+    anchors_add:
+      - "Naam"
+      - "Nom"
+
+  given_names:
+    anchors_add:
+      - "Voornamen"
+      - "Prenoms"
+
+  nationality:
+    anchors_add:
+      - "Nationaliteit"
+      - "Nationalite"
+    redaction:
+      trim_leading_token_lengths:
+        - 3
+
+  date_of_birth:
+    anchors_add:
+      - "Geboortedatum"
+      - "Date de naissance"
+
+  sex:
+    anchors_add:
+      - "Geslacht"
+      - "Sexe"
+
+  height:
+    anchors_add:
+      - "Lengte"
+      - "Taille"
+
+  place_of_birth:
+    anchors_add:
+      - "Geboorteplaats"
+      - "Lieu de naissance"
+
+  date_of_issue:
+    anchors_add:
+      - "Datum van afgifte"
+      - "Date de delivrance"
+
+  date_of_expiry:
+    anchors_add:
+      - "Geldig tot"
+      - "Date d'expiration"
+
+  mrz:
+    match_hints_add:
+      - "Often begins with P<NLD."
