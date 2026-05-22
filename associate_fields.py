@@ -14,6 +14,72 @@ def load_yaml(path):
         return yaml.safe_load(file)
 
 
+def fields_to_map(fields):
+    if isinstance(fields, dict):
+        return fields
+
+    mapped_fields = {}
+    for field in fields or []:
+        if isinstance(field, dict) and field.get("id"):
+            field_copy = dict(field)
+            field_id = field_copy.pop("id")
+            mapped_fields[field_id] = field_copy
+    return mapped_fields
+
+
+def merge_dicts(base, override):
+    merged = dict(base or {})
+    for key, value in (override or {}).items():
+        if isinstance(merged.get(key), dict) and isinstance(value, dict):
+            merged[key] = merge_dicts(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def apply_field_overrides(document_definition):
+    fields = fields_to_map(document_definition.get("fields", {}))
+    field_defaults = document_definition.get("field_defaults", {})
+
+    for field_id, field in fields.items():
+        fields[field_id] = merge_dicts(field_defaults, field)
+
+    for field_id, override in (document_definition.get("field_overrides") or {}).items():
+        fields[field_id] = merge_dicts(fields.get(field_id, {}), override)
+
+    document_definition["fields"] = fields
+    document_definition.pop("field_overrides", None)
+    return document_definition
+
+
+def load_document_definition(path):
+    path = Path(path)
+    document_definition = load_yaml(path)
+
+    parent_path = document_definition.get("extends")
+    if parent_path:
+        parent_definition = load_document_definition(path.parent / parent_path)
+        child_definition = {
+            key: value
+            for key, value in document_definition.items()
+            if key not in {"extends", "field_overrides"}
+        }
+        merged_definition = merge_dicts(parent_definition, child_definition)
+        merged_definition["field_overrides"] = document_definition.get("field_overrides", {})
+        return apply_field_overrides(merged_definition)
+
+    return apply_field_overrides(document_definition)
+
+
+def iter_fields(document_definition):
+    fields = fields_to_map(document_definition.get("fields", {}))
+    for field_id, field in fields.items():
+        if field.get("enabled", True):
+            field_with_id = dict(field)
+            field_with_id["id"] = field_id
+            yield field_with_id
+
+
 def load_json(path):
     with open(path, "r", encoding="utf-8") as file:
         return json.load(file)
@@ -40,30 +106,36 @@ def make_run_paths(config, image_path):
 
 def compact_fields(document_definition):
     fields = []
-    for field in document_definition.get("fields", []):
+    for field in iter_fields(document_definition):
         fields.append(
             {
                 "id": field.get("id"),
                 "label": field.get("label"),
+                "type": field.get("type"),
+                "required": field.get("required", False),
                 "description": field.get("description"),
                 "anchors": field.get("anchors", []),
-                "location_hints": field.get("location_hints", []),
-                "redact_instruction": field.get("redact_instruction"),
+                "match_hints": field.get("match_hints", []),
+                "excluded_fragment_tags": field.get("excluded_fragment_tags", []),
+                "max_value_fragments": field.get("max_value_fragments"),
+                "redaction": field.get("redaction", {}),
             }
         )
     return fields
 
 
-def compact_fragments(ocr_manifest):
+def compact_fragments(document_definition, ocr_manifest):
     fragments = []
     for fragment in ocr_manifest.get("fragments", []):
+        text = fragment.get("text", "")
         item = {
             "id": fragment.get("id"),
             "box": fragment.get("box"),
             "confidence": fragment.get("confidence"),
+            "tags": get_fragment_tags(document_definition, fragment),
         }
         if "text" in fragment:
-            item["text"] = fragment.get("text")
+            item["text"] = text
         elif "text_length" in fragment:
             item["text_length"] = fragment.get("text_length")
         fragments.append(item)
@@ -79,12 +151,12 @@ def build_association_prompt(document_definition, ocr_manifest):
             "hints": document_definition.get("document_hints", []),
         },
         "fields": compact_fields(document_definition),
-        "ocr_fragments": compact_fragments(ocr_manifest),
+        "ocr_fragments": compact_fragments(document_definition, ocr_manifest),
     }
 
     return (
         "You are matching OCR fragments to configured document fields.\n"
-        "The OCR text may contain typos. Use field anchors, layout hints, text similarity, and coordinates.\n"
+        "The OCR text may contain typos. Use field anchors, match hints, text similarity, and coordinates.\n"
         "Return only valid JSON. Do not include markdown or explanations.\n"
         "Do not transcribe or correct any PII values.\n"
         "Use OCR fragment ids only.\n"
@@ -118,22 +190,28 @@ def build_field_association_prompt(document_definition, field, ocr_manifest):
         "field": {
             "id": field.get("id"),
             "label": field.get("label"),
+            "type": field.get("type"),
+            "required": field.get("required", False),
             "description": field.get("description"),
             "anchors": field.get("anchors", []),
-            "location_hints": field.get("location_hints", []),
-            "redact_instruction": field.get("redact_instruction"),
+            "match_hints": field.get("match_hints", []),
+            "excluded_fragment_tags": field.get("excluded_fragment_tags", []),
+            "max_value_fragments": field.get("max_value_fragments"),
+            "redaction": field.get("redaction", {}),
         },
-        "ocr_fragments": compact_fragments(ocr_manifest),
+        "ocr_fragments": compact_fragments(document_definition, ocr_manifest),
     }
 
     return (
         "You are matching OCR fragments to one configured document field.\n"
-        "The OCR text may contain typos. Use field anchors, layout hints, text similarity, and coordinates.\n"
+        "The OCR text may contain typos. Use field anchors, match hints, text similarity, and coordinates.\n"
         "Return only valid JSON. Do not include markdown or explanations.\n"
         "Do not transcribe or correct any PII values.\n"
         "Use OCR fragment ids only.\n"
         "Choose the OCR fragments that contain the field value.\n"
         "Anchor fragments are optional and should be labels/headings near the value.\n"
+        "If the field lists excluded_fragment_tags, do not choose value fragments with those tags.\n"
+        "If max_value_fragments is set, choose no more than that many value fragments.\n"
         "If the field is not visible or cannot be matched, use empty arrays.\n"
         "Return exactly one match object in the matches array.\n"
         "Use this exact JSON shape:\n"
@@ -259,7 +337,7 @@ def associate_fields(config, document_definition, ocr_manifest):
     matches = []
     field_results = []
 
-    for field in document_definition.get("fields", []):
+    for field in iter_fields(document_definition):
         field_id = field.get("id")
         prompt = build_field_association_prompt(document_definition, field, ocr_manifest)
         raw_response, diagnostic = call_llm(config, prompt)
@@ -306,13 +384,61 @@ def clean_json_response(raw_response):
     return text
 
 
+def get_fragment_tags(document_definition, fragment):
+    text = str(fragment.get("text", "")).casefold()
+    tags = []
+
+    for tag, rule in (document_definition.get("fragment_tags") or {}).items():
+        text_contains = [str(value).casefold() for value in rule.get("text_contains", [])]
+        if any(value in text for value in text_contains):
+            tags.append(tag)
+
+    return tags
+
+
 def is_number(value):
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
 
-def validate_matches(matches, field_ids, fragment_ids):
+def box_center(box):
+    return ((box["x1"] + box["x2"]) / 2, (box["y1"] + box["y2"]) / 2)
+
+
+def box_distance(first_box, second_box):
+    first_x, first_y = box_center(first_box)
+    second_x, second_y = box_center(second_box)
+    return math.hypot(first_x - second_x, first_y - second_y)
+
+
+def limit_value_fragments(value_ids, anchor_ids, field, fragments_by_id):
+    max_value_fragments = field.get("max_value_fragments")
+    if not isinstance(max_value_fragments, int) or max_value_fragments < 1:
+        return value_ids
+
+    if len(value_ids) <= max_value_fragments:
+        return value_ids
+
+    anchor_boxes = [
+        fragments_by_id[fragment_id]["box"]
+        for fragment_id in anchor_ids
+        if fragment_id in fragments_by_id and isinstance(fragments_by_id[fragment_id].get("box"), dict)
+    ]
+
+    def sort_key(fragment_id):
+        fragment_box = fragments_by_id[fragment_id]["box"]
+        if not anchor_boxes:
+            return (0, value_ids.index(fragment_id))
+
+        nearest_anchor_distance = min(box_distance(fragment_box, anchor_box) for anchor_box in anchor_boxes)
+        return (nearest_anchor_distance, value_ids.index(fragment_id))
+
+    return sorted(value_ids, key=sort_key)[:max_value_fragments]
+
+
+def validate_matches(matches, fields_by_id, fragments_by_id, document_definition):
     valid_matches = []
     rejected_matches = []
+    fragment_ids = set(fragments_by_id)
 
     for index, match in enumerate(matches):
         if not isinstance(match, dict):
@@ -320,7 +446,7 @@ def validate_matches(matches, field_ids, fragment_ids):
             continue
 
         field_id = match.get("field_id")
-        if field_id not in field_ids:
+        if field_id not in fields_by_id:
             rejected_matches.append({"index": index, "field_id": field_id, "error": "Unknown field_id."})
             continue
 
@@ -345,6 +471,28 @@ def validate_matches(matches, field_ids, fragment_ids):
                 }
             )
             continue
+
+        excluded_tags = set(fields_by_id[field_id].get("excluded_fragment_tags", []))
+        original_value_ids = list(value_ids)
+        if excluded_tags:
+            value_ids = [
+                fragment_id
+                for fragment_id in value_ids
+                if not excluded_tags.intersection(get_fragment_tags(document_definition, fragments_by_id[fragment_id]))
+            ]
+            if original_value_ids and not value_ids:
+                rejected_matches.append(
+                    {
+                        "index": index,
+                        "field_id": field_id,
+                        "error": "Only excluded fragments were selected as values.",
+                        "excluded_fragment_tags": sorted(excluded_tags),
+                        "value_fragment_ids": original_value_ids,
+                    }
+                )
+                continue
+
+        value_ids = limit_value_fragments(value_ids, anchor_ids, fields_by_id[field_id], fragments_by_id)
 
         confidence = match.get("confidence")
         if not is_number(confidence):
@@ -375,11 +523,40 @@ def merge_boxes(boxes):
     }
 
 
-def build_redaction_boxes(matches, fragments_by_id):
+def trim_leading_token_box(fragment, box, token_lengths):
+    text = str(fragment.get("text", ""))
+    if " " not in text:
+        return box
+
+    leading_token, remaining_text = text.split(" ", 1)
+    if len(leading_token) not in token_lengths or not leading_token.isupper() or not remaining_text.strip():
+        return box
+
+    text_length = len(text)
+    trim_length = len(leading_token) + 1
+    box_width = box["x2"] - box["x1"]
+    trim_width = round(box_width * (trim_length / text_length))
+
+    adjusted_box = dict(box)
+    adjusted_box["x1"] = min(box["x2"] - 1, box["x1"] + trim_width)
+    return adjusted_box
+
+
+def get_fragment_redaction_box(fragment, field):
+    box = dict(fragment["box"])
+    redaction = field.get("redaction", {})
+    token_lengths = redaction.get("trim_leading_token_lengths", [])
+    if token_lengths:
+        box = trim_leading_token_box(fragment, box, set(token_lengths))
+    return box
+
+
+def build_redaction_boxes(matches, fragments_by_id, fields_by_id):
     redaction_boxes = []
     for match in matches:
+        field = fields_by_id.get(match["field_id"], {})
         boxes = [
-            fragments_by_id[fragment_id]["box"]
+            get_fragment_redaction_box(fragments_by_id[fragment_id], field)
             for fragment_id in match["value_fragment_ids"]
             if fragment_id in fragments_by_id
         ]
@@ -430,7 +607,7 @@ def main():
 
     config = load_yaml(config_path)
     ocr_manifest = load_json(ocr_log_path)
-    document_definition = load_yaml(document_definition_path)
+    document_definition = load_document_definition(document_definition_path)
     overlay_path, log_path = make_run_paths(config, image_path)
 
     manifest = {
@@ -450,11 +627,11 @@ def main():
         matches, field_results = associate_fields(config, document_definition, ocr_manifest)
         manifest["field_results"] = field_results
 
-        field_ids = {field.get("id") for field in document_definition.get("fields", [])}
+        fields_by_id = {field.get("id"): field for field in iter_fields(document_definition)}
         fragments = ocr_manifest.get("fragments", [])
         fragments_by_id = {fragment["id"]: fragment for fragment in fragments}
-        valid_matches, rejected_matches = validate_matches(matches, field_ids, set(fragments_by_id))
-        redaction_boxes = build_redaction_boxes(valid_matches, fragments_by_id)
+        valid_matches, rejected_matches = validate_matches(matches, fields_by_id, fragments_by_id, document_definition)
+        redaction_boxes = build_redaction_boxes(valid_matches, fragments_by_id, fields_by_id)
         save_match_overlay(image_path, overlay_path, redaction_boxes)
 
         manifest.update(

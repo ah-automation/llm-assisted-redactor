@@ -22,6 +22,67 @@ def load_yaml(path):
         return yaml.safe_load(file)
 
 
+def fields_to_map(fields):
+    if isinstance(fields, dict):
+        return fields
+
+    mapped_fields = {}
+    for field in fields or []:
+        if isinstance(field, dict) and field.get("id"):
+            field_copy = dict(field)
+            field_id = field_copy.pop("id")
+            mapped_fields[field_id] = field_copy
+    return mapped_fields
+
+
+def merge_dicts(base, override):
+    merged = dict(base or {})
+    for key, value in (override or {}).items():
+        if isinstance(merged.get(key), dict) and isinstance(value, dict):
+            merged[key] = merge_dicts(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def apply_field_overrides(document_definition):
+    fields = fields_to_map(document_definition.get("fields", {}))
+    for field_id, override in (document_definition.get("field_overrides") or {}).items():
+        fields[field_id] = merge_dicts(fields.get(field_id, {}), override)
+
+    document_definition["fields"] = fields
+    document_definition.pop("field_overrides", None)
+    return document_definition
+
+
+def load_document_definition(path):
+    path = Path(path)
+    document_definition = load_yaml(path)
+
+    parent_path = document_definition.get("extends")
+    if parent_path:
+        parent_definition = load_document_definition(path.parent / parent_path)
+        child_definition = {
+            key: value
+            for key, value in document_definition.items()
+            if key not in {"extends", "field_overrides"}
+        }
+        merged_definition = merge_dicts(parent_definition, child_definition)
+        merged_definition["field_overrides"] = document_definition.get("field_overrides", {})
+        return apply_field_overrides(merged_definition)
+
+    return apply_field_overrides(document_definition)
+
+
+def iter_fields(document_definition):
+    fields = fields_to_map(document_definition.get("fields", {}))
+    for field_id, field in fields.items():
+        if field.get("enabled", True):
+            field_with_id = dict(field)
+            field_with_id["id"] = field_id
+            yield field_with_id
+
+
 def load_config(config_path):
     return load_yaml(config_path)
 
@@ -98,10 +159,11 @@ def build_document_field_prompt(document_definition, field, image_width, image_h
         "Locate only this one configured field:\n"
         f"- id: {field.get('id')}\n"
         f"  label: {field.get('label')}\n"
+        f"  type: {field.get('type')}\n"
         f"  description: {field.get('description')}\n"
         f"  anchors: {join_text_items(field.get('anchors', []))}\n"
-        f"  location_hints: {join_text_items(field.get('location_hints', []))}\n"
-        f"  redact_instruction: {field.get('redact_instruction')}\n\n"
+        f"  match_hints: {join_text_items(field.get('match_hints', []))}\n"
+        f"  redaction: {field.get('redaction', {})}\n\n"
         "If the field appears more than once, return one detection for each appearance.\n"
         "If this field is not visible, return {\"boxes\": []}.\n"
         "Return only valid JSON. Do not include markdown or explanations.\n"
@@ -338,7 +400,7 @@ def locate_with_document_definition(config, document_definition, image_path, ima
     rejected_boxes = []
     field_results = []
 
-    for field in document_definition.get("fields", []):
+    for field in iter_fields(document_definition):
         field_id = field.get("id")
         prompt = build_document_field_prompt(document_definition, field, image_width, image_height)
         raw_response, vlm_diagnostic = call_vlm(config, image_path, prompt)
@@ -406,7 +468,7 @@ def main():
     document_definition_path = Path(args.document_definition) if args.document_definition else None
 
     config = load_config(config_path)
-    document_definition = load_yaml(document_definition_path) if document_definition_path else None
+    document_definition = load_document_definition(document_definition_path) if document_definition_path else None
     output_path, debug_path, log_path = make_run_paths(config, image_path)
 
     manifest = {

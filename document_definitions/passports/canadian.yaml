@@ -1,0 +1,73 @@
+extends: "common.yaml"
+
+id: "passport.canadian"
+label: "Canadian passport"
+description: "Canadian regular passport biographical data page."
+
+document_hints:
+  - "Canadian passports often use English and French bilingual labels."
+
+field_overrides:
+  passport_number:
+    anchors:
+      - "Passport No"
+      - "No de passeport"
+      - "Passport No./N de passeport"
+    match_hints:
+      - "Usually near the upper right."
+
+  surname:
+    anchors:
+      - "Surname"
+      - "Nom"
+      - "Surname/Nom"
+
+  given_names:
+    anchors:
+      - "Given names"
+      - "Prenoms"
+      - "Given names/Prenoms"
+
+  nationality:
+    anchors:
+      - "Nationality"
+      - "Nationalite"
+      - "Nationality/Nationalite"
+
+  date_of_birth:
+    anchors:
+      - "Date of birth"
+      - "Date de naissance"
+      - "Date of birth/Date de naissance"
+      - "DOB"
+
+  sex:
+    anchors:
+      - "Sex"
+      - "Sexe"
+      - "Sex/Sexe"
+
+  place_of_birth:
+    anchors:
+      - "Place of birth"
+      - "Lieu de naissance"
+      - "Place of birth/Lieu de naissance"
+
+  date_of_issue:
+    anchors:
+      - "Date of issue"
+      - "Date de delivrance"
+      - "Date of issue/Date de delivrance"
+
+  date_of_expiry:
+    anchors:
+      - "Date of expiry"
+      - "Date d'expiration"
+      - "Date of expiry/Date d'expiration"
+      - "Expiry date"
+
+  mrz:
+    match_hints:
+      - "Usually two lines at the bottom."
+      - "Often begins with P<CAN."
+      - "Often contains many < characters."

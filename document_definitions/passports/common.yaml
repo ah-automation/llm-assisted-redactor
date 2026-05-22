@@ -1,0 +1,204 @@
+id: "passport.common"
+label: "Passport"
+description: "Common fields for passport biographical data pages."
+
+fragment_tags:
+  mrz:
+    label: "Machine-readable zone text"
+    text_contains:
+      - "<"
+  field_label:
+    label: "Printed field label"
+    text_contains:
+      - "passport no"
+      - "passport number"
+      - "documentno"
+      - "document no"
+      - "no.dudocument"
+      - "surname"
+      - "family name"
+      - "last name"
+      - "given names"
+      - "given name"
+      - "givennames"
+      - "first name"
+      - "nombres"
+      - "nationality"
+      - "nationalite"
+      - "nationaliteit"
+      - "date of birth"
+      - "dateofbirth"
+      - "dob"
+      - "geboortedatum"
+      - "place of birth"
+      - "placeofbirth"
+      - "geboorteplaats"
+      - "sex"
+      - "sexe"
+      - "sexo"
+      - "geslacht"
+      - "height"
+      - "length"
+      - "lengte"
+      - "taille"
+      - "date of issue"
+      - "dateof issue"
+      - "datumvanafgifte"
+      - "date de delivrance"
+      - "datededelivrance"
+      - "date of expiry"
+      - "dateof expiry"
+      - "date of expiration"
+      - "expiration"
+      - "expiry"
+      - "geldig tot"
+
+field_defaults:
+  excluded_fragment_tags:
+    - "mrz"
+    - "field_label"
+
+fields:
+  passport_number:
+    label: "Passport number"
+    type: "text"
+    required: true
+    description: "The passport document number."
+    anchors:
+      - "Passport No"
+      - "Passport number"
+    match_hints:
+      - "Short alphanumeric value near the passport number label."
+    redaction:
+      mode: "ocr_box"
+
+  surname:
+    label: "Surname"
+    type: "text"
+    required: true
+    description: "The holder's family name or surname."
+    anchors:
+      - "Surname"
+      - "Family name"
+      - "Last name"
+    redaction:
+      mode: "ocr_box"
+
+  given_names:
+    label: "Given names"
+    type: "text"
+    required: true
+    description: "The holder's given name or names."
+    anchors:
+      - "Given names"
+      - "Given name"
+      - "First name"
+      - "Nombres"
+    match_hints:
+      - "Use the visible printed value near the given names label."
+    redaction:
+      mode: "ocr_box"
+
+  nationality:
+    label: "Nationality"
+    type: "text"
+    required: true
+    max_value_fragments: 1
+    description: "The holder's nationality."
+    anchors:
+      - "Nationality"
+    match_hints:
+      - "Use the printed nationality value near the nationality label."
+      - "Do not include the separate issuing country code field as a nationality value."
+    redaction:
+      mode: "ocr_box"
+      trim_leading_token_lengths:
+        - 3
+
+  date_of_birth:
+    label: "Date of birth"
+    type: "text"
+    required: true
+    description: "The holder's date of birth."
+    anchors:
+      - "Date of birth"
+      - "DOB"
+    match_hints:
+      - "Date value near the birth date label."
+    redaction:
+      mode: "ocr_box"
+
+  sex:
+    label: "Sex"
+    type: "text"
+    required: true
+    description: "The holder's sex or gender marker."
+    anchors:
+      - "Sex"
+    match_hints:
+      - "Usually a short one-character marker near the sex label."
+    redaction:
+      mode: "ocr_box"
+
+  height:
+    label: "Height"
+    type: "text"
+    required: false
+    description: "The holder's height."
+    anchors:
+      - "Height"
+      - "Length"
+      - "Lengte"
+      - "Taille"
+    match_hints:
+      - "Usually a short measurement value near the height label."
+      - "May include centimeters or a numeric value."
+    redaction:
+      mode: "ocr_box"
+
+  place_of_birth:
+    label: "Place of birth"
+    type: "text"
+    required: true
+    description: "The holder's place of birth."
+    anchors:
+      - "Place of birth"
+    redaction:
+      mode: "ocr_box"
+
+  date_of_issue:
+    label: "Date of issue"
+    type: "text"
+    required: true
+    description: "The date the passport was issued."
+    anchors:
+      - "Date of issue"
+      - "Issue date"
+    redaction:
+      mode: "ocr_box"
+
+  date_of_expiry:
+    label: "Date of expiry"
+    type: "text"
+    required: true
+    description: "The date the passport expires."
+    anchors:
+      - "Date of expiry"
+      - "Expiry date"
+    redaction:
+      mode: "ocr_box"
+
+  mrz:
+    label: "Machine-readable zone"
+    type: "mrz"
+    required: true
+    excluded_fragment_tags: []
+    description: "The machine-readable zone containing passport data."
+    anchors:
+      - "Machine-readable zone"
+      - "MRZ"
+    match_hints:
+      - "Usually two lines near the bottom."
+      - "Often contains many < characters."
+    redaction:
+      mode: "ocr_box"
