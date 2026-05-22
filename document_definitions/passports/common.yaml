@@ -53,8 +53,6 @@ fields:
     anchors:
       - "Passport No"
       - "Passport number"
-    match_hints:
-      - "Use the document number value near the passport number label."
     redaction:
       mode: "ocr_box"
 
@@ -79,8 +77,6 @@ fields:
       - "Given names"
       - "Given name"
       - "First name"
-    match_hints:
-      - "Use the visible printed value near the given names label."
     redaction:
       mode: "ocr_box"
 
@@ -92,9 +88,6 @@ fields:
     description: "The holder's nationality."
     anchors:
       - "Nationality"
-    match_hints:
-      - "Use the printed nationality value near the nationality label."
-      - "Do not include a separate issuing country code field as a nationality value."
     redaction:
       mode: "ocr_box"
 
@@ -106,8 +99,6 @@ fields:
     anchors:
       - "Date of birth"
       - "DOB"
-    match_hints:
-      - "Use the date value near the birth date label."
     redaction:
       mode: "ocr_box"
 
@@ -118,8 +109,6 @@ fields:
     description: "The holder's sex or gender marker."
     anchors:
       - "Sex"
-    match_hints:
-      - "Usually a short one-character marker near the sex label."
     redaction:
       mode: "ocr_box"
 
@@ -130,8 +119,6 @@ fields:
     description: "The holder's height, when present."
     anchors:
       - "Height"
-    match_hints:
-      - "Usually a short measurement value near the height label."
     redaction:
       mode: "ocr_box"
 
