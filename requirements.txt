@@ -3,3 +3,4 @@ pyyaml
 openai
 rapidocr
 onnxruntime
+opencv-python

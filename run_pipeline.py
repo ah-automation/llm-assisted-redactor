@@ -3,6 +3,7 @@ from datetime import datetime
 from pathlib import Path
 
 import associate_fields
+import face_detect
 import ocr_image
 import redact_from_matches
 
@@ -55,6 +56,18 @@ def run_pipeline(image_path, config_path, document_definition_path, include_text
         document_definition,
     )
     redaction_boxes = associate_fields.build_redaction_boxes(valid_matches, fragments_by_id, fields_by_id)
+    face_boxes = []
+    face_error = None
+    if face_detect.is_enabled(config):
+        try:
+            face_boxes = face_detect.detect_faces(image_path, config)
+            redaction_boxes.extend(face_boxes)
+        except Exception as error:
+            face_error = {
+                "error": str(error),
+                "error_type": type(error).__name__,
+            }
+
     associate_fields.save_match_overlay(image_path, match_overlay_path, redaction_boxes)
 
     match_manifest = {
@@ -72,6 +85,13 @@ def run_pipeline(image_path, config_path, document_definition_path, include_text
         "valid_matches": valid_matches,
         "rejected_matches": rejected_matches,
         "redaction_boxes": redaction_boxes,
+        "face_detection": {
+            "enabled": face_detect.is_enabled(config),
+            "status": "error" if face_error else "completed",
+            "detections": face_boxes,
+            "detection_count": len(face_boxes),
+            "error": face_error,
+        },
         "valid_match_count": len(valid_matches),
         "rejected_match_count": len(rejected_matches),
         "redaction_box_count": len(redaction_boxes),

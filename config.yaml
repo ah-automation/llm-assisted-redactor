@@ -56,3 +56,11 @@ pii_targets:
 
 output_dir: "output"
 logs_dir: "logs"
+
+face_detection:
+  enabled: true
+  model_path: "models/face_detection_yunet_2023mar.onnx"
+  score_threshold: 0.6
+  nms_threshold: 0.3
+  top_k: 5000
+  expand_box_percent: 0.15
