@@ -31,28 +31,21 @@ fragment_tags:
       - "date of expiration"
       - "expiration"
 
-candidate_defaults:
-  window:
-    left: 0
-    right: 0.08
-    above: 0
-    below: 0.06
-
 field_defaults:
   max_value_fragments: 1
-  excluded_fragment_tags:
-    - "mrz"
-    - "field_label"
 
 fields:
   passport_number:
-    label: "Passport number"
+    label: "Passport or document number"
     type: "text"
     required: true
-    description: "The passport document number."
+    description: "The passport, travel document, or document number printed in the main biographical data area."
     anchors:
       - "Passport No"
       - "Passport number"
+      - "Document No"
+      - "Document number"
+      - "Travel document number"
     redaction:
       mode: "ocr_box"
 

@@ -378,14 +378,22 @@ def save_debug_overlay(image_path, debug_path, boxes):
 
 
 def locate_with_config_targets(config, image_path, image_width, image_height):
-    prompt = build_config_prompt(config["pii_targets"], image_width, image_height)
+    pii_targets = config.get("pii_targets")
+    if not pii_targets:
+        raise ValueError(
+            "No pii_targets were found in config.yaml. "
+            "Use run_pipeline.py for the current OCR + LLM workflow, "
+            "or pass --document-definition to this legacy VLM script."
+        )
+
+    prompt = build_config_prompt(pii_targets, image_width, image_height)
     raw_response, vlm_diagnostic = call_vlm(config, image_path, prompt)
     try:
         boxes = parse_boxes(raw_response)
     except (json.JSONDecodeError, ValueError) as error:
         raise VlmResponseError(str(error), raw_response) from error
 
-    target_ids = get_target_ids(config["pii_targets"])
+    target_ids = get_target_ids(pii_targets)
     valid_boxes, rejected_boxes = validate_boxes(boxes, image_width, image_height, target_ids)
 
     return {

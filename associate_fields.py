@@ -122,26 +122,6 @@ def make_run_paths(config, image_path):
     return overlay_path, log_path
 
 
-def compact_fields(document_definition):
-    fields = []
-    for field in iter_fields(document_definition):
-        fields.append(
-            {
-                "id": field.get("id"),
-                "label": field.get("label"),
-                "type": field.get("type"),
-                "required": field.get("required", False),
-                "description": field.get("description"),
-                "anchors": field.get("anchors", []),
-                "match_hints": field.get("match_hints", []),
-                "excluded_fragment_tags": field.get("excluded_fragment_tags", []),
-                "max_value_fragments": field.get("max_value_fragments"),
-                "redaction": field.get("redaction", {}),
-            }
-        )
-    return fields
-
-
 def compact_fragments(document_definition, ocr_manifest):
     fragments = []
     for fragment in ocr_manifest.get("fragments", []):
@@ -150,7 +130,6 @@ def compact_fragments(document_definition, ocr_manifest):
             "id": fragment.get("id"),
             "box": fragment.get("box"),
             "confidence": fragment.get("confidence"),
-            "tags": get_fragment_tags(document_definition, fragment),
         }
         if "text" in fragment:
             item["text"] = text
@@ -160,149 +139,13 @@ def compact_fragments(document_definition, ocr_manifest):
     return fragments
 
 
-def normalized_text(text):
-    return "".join(character for character in str(text or "").casefold() if character.isalnum())
-
-
-def text_matches_anchor(text, anchor):
-    text_key = normalized_text(text)
-    anchor_key = normalized_text(anchor)
-    return bool(anchor_key and anchor_key in text_key)
-
-
-def get_candidate_window(document_definition, field):
-    return field.get("candidate_window") or (document_definition.get("candidate_defaults") or {}).get("window")
-
-
-def expanded_box(box, window, image_width, image_height):
-    return {
-        "x1": box["x1"] - window.get("left", 0) * image_width,
-        "y1": box["y1"] - window.get("above", 0) * image_height,
-        "x2": box["x2"] + window.get("right", 0) * image_width,
-        "y2": box["y2"] + window.get("below", 0) * image_height,
-    }
-
-
-def point_inside_box(point, box):
-    x, y = point
-    return box["x1"] <= x <= box["x2"] and box["y1"] <= y <= box["y2"]
-
-
-def find_anchor_fragments(field, fragments):
-    anchors = field.get("anchors", [])
-    anchor_fragments = []
-    for fragment in fragments:
-        text = fragment.get("text", "")
-        if any(text_matches_anchor(text, anchor) for anchor in anchors):
-            anchor_fragments.append(fragment)
-    return anchor_fragments
-
-
-def filter_candidate_fragments(document_definition, field, ocr_manifest):
-    fragments = ocr_manifest.get("fragments", [])
-    image_size = ocr_manifest.get("image_size", {})
-    image_width = image_size.get("width")
-    image_height = image_size.get("height")
-
-    if field.get("type") == "mrz":
-        tagged_fragments = [
-            fragment
-            for fragment in fragments
-            if "mrz" in get_fragment_tags(document_definition, fragment)
-        ]
-        return tagged_fragments or fragments, {
-            "strategy": "tagged_mrz",
-            "anchor_fragment_ids": [],
-            "candidate_fragment_count": len(tagged_fragments or fragments),
-        }
-
-    window = get_candidate_window(document_definition, field)
-    anchor_fragments = find_anchor_fragments(field, fragments)
-    if not window or not anchor_fragments or not image_width or not image_height:
-        return fragments, {
-            "strategy": "all_fragments",
-            "anchor_fragment_ids": [fragment.get("id") for fragment in anchor_fragments],
-            "candidate_fragment_count": len(fragments),
-        }
-
-    candidate_ids = {fragment.get("id") for fragment in anchor_fragments}
-    search_boxes = [
-        expanded_box(fragment["box"], window, image_width, image_height)
-        for fragment in anchor_fragments
-        if isinstance(fragment.get("box"), dict)
-    ]
-
-    for fragment in fragments:
-        box = fragment.get("box")
-        if not isinstance(box, dict):
-            continue
-        if any(point_inside_box(box_center(box), search_box) for search_box in search_boxes):
-            candidate_ids.add(fragment.get("id"))
-
-    candidate_fragments = [
-        fragment
-        for fragment in fragments
-        if fragment.get("id") in candidate_ids
-    ]
-    return candidate_fragments, {
-        "strategy": "candidate_window",
-        "window": window,
-        "anchor_fragment_ids": [fragment.get("id") for fragment in anchor_fragments],
-        "candidate_fragment_count": len(candidate_fragments),
-    }
-
-
-def make_candidate_manifest(ocr_manifest, candidate_fragments):
-    candidate_manifest = dict(ocr_manifest)
-    candidate_manifest["fragments"] = candidate_fragments
-    candidate_manifest["fragment_count"] = len(candidate_fragments)
-    return candidate_manifest
-
-
-def build_association_prompt(document_definition, ocr_manifest):
-    request = {
-        "document": {
-            "id": document_definition.get("id"),
-            "label": document_definition.get("label"),
-            "description": document_definition.get("description"),
-            "hints": document_definition.get("document_hints", []),
-        },
-        "fields": compact_fields(document_definition),
-        "ocr_fragments": compact_fragments(document_definition, ocr_manifest),
-    }
-
-    return (
-        "You are matching OCR fragments to configured document fields.\n"
-        "The OCR text may contain typos. Use field anchors, match hints, text similarity, and coordinates.\n"
-        "Return only valid JSON. Do not include markdown or explanations.\n"
-        "Do not transcribe or correct any PII values.\n"
-        "Use OCR fragment ids only.\n"
-        "For each field, choose the OCR fragments that contain the field value.\n"
-        "Anchor fragments are optional and should be labels/headings near the value.\n"
-        "If a field is not visible or cannot be matched, use empty arrays.\n"
-        "Use this exact JSON shape:\n"
-        "{\n"
-        '  "matches": [\n'
-        "    {\n"
-        '      "field_id": "passport_number",\n'
-        '      "value_fragment_ids": ["ocr_0001"],\n'
-        '      "anchor_fragment_ids": ["ocr_0002"],\n'
-        '      "confidence": 0.0,\n'
-        '      "notes": "short non-PII reason"\n'
-        "    }\n"
-        "  ]\n"
-        "}\n\n"
-        "Input JSON:\n"
-        f"{json.dumps(request, indent=2)}"
-    )
-
-
 def build_field_association_prompt(document_definition, field, ocr_manifest):
     request = {
         "document": {
             "id": document_definition.get("id"),
             "label": document_definition.get("label"),
             "description": document_definition.get("description"),
+            "hints": document_definition.get("document_hints", []),
         },
         "field": {
             "id": field.get("id"),
@@ -321,14 +164,19 @@ def build_field_association_prompt(document_definition, field, ocr_manifest):
 
     return (
         "You are matching OCR fragments to one configured document field.\n"
-        "The OCR text may contain typos. Use field anchors, match hints, text similarity, and coordinates.\n"
+        "The OCR text may contain typos, missing spaces, extra numbers, or multiple languages in one fragment.\n"
         "Return only valid JSON. Do not include markdown or explanations.\n"
         "Do not transcribe or correct any PII values.\n"
         "Use OCR fragment ids only.\n"
-        "Choose the OCR fragments that contain the field value.\n"
-        "The provided OCR fragments have already been filtered to nearby candidates when anchors were found.\n"
-        "Anchor fragments are optional and should be labels/headings near the value.\n"
-        "If the field lists excluded_fragment_tags, do not choose value fragments with those tags.\n"
+        "Treat the field anchors as conceptual labels, not exact required text.\n"
+        "First identify the OCR fragment or fragments that best represent the field label, even if the OCR text is noisy.\n"
+        "For example, a fragment like 'dateof issue', 'dateofissue', or '9datumvanafgifte/dateof issue' can represent the conceptual label 'Date of issue'.\n"
+        "Put label fragments in anchor_fragment_ids.\n"
+        "Then choose the nearest common-sense OCR fragment or fragments that contain the field value.\n"
+        "For ordinary text fields, values are usually immediately to the right of or below the matching label.\n"
+        "Do not put the same fragment id in both anchor_fragment_ids and value_fragment_ids.\n"
+        "Do not select the label/header fragment as the value.\n"
+        "For MRZ fields, choose OCR fragments containing machine-readable zone text, often with < characters.\n"
         "If max_value_fragments is set, choose no more than that many value fragments.\n"
         "If the field is not visible or cannot be matched, use empty arrays.\n"
         "Return exactly one match object in the matches array.\n"
@@ -457,14 +305,15 @@ def associate_fields(config, document_definition, ocr_manifest):
 
     for field in iter_fields(document_definition):
         field_id = field.get("id")
-        candidate_fragments, candidate_info = filter_candidate_fragments(document_definition, field, ocr_manifest)
-        candidate_manifest = make_candidate_manifest(ocr_manifest, candidate_fragments)
-        prompt = build_field_association_prompt(document_definition, field, candidate_manifest)
+        prompt = build_field_association_prompt(document_definition, field, ocr_manifest)
         raw_response, diagnostic = call_llm(config, prompt)
         field_result = {
             "field_id": field_id,
             "llm_diagnostic": diagnostic,
-            "candidate_selection": candidate_info,
+            "association_context": {
+                "strategy": "full_ocr_context",
+                "fragment_count": len(ocr_manifest.get("fragments", [])),
+            },
             "status": "started",
         }
 

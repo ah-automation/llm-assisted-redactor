@@ -1,58 +1,9 @@
 vlm:
   base_url: "http://localhost:1234/v1"
   api_key: "lm-studio"
-  model: "qwen2.5-14b-instruct-1m"
+  model: "nvidia/nemotron-3-nano-omni"
   temperature: 0
   max_tokens: 2000
-
-pii_targets:
-  - id: "name_full"
-    label: "Full name"
-    description: "A complete personal name shown as one combined name."
-    hints:
-      - "May include first, middle, and last name together."
-      - "Redact the full visible region containing the complete name."
-  - id: "first_name"
-    label: "First name"
-    description: "A person's given name when shown separately from the rest of the name."
-    hints:
-      - "Look for a standalone first or given name field."
-  - id: "middle_name"
-    label: "Middle name"
-    description: "A person's middle name or middle initial when shown separately."
-    hints:
-      - "Look for standalone middle name, middle initial, or abbreviated middle name fields."
-  - id: "last_name"
-    label: "Last name"
-    description: "A person's family name or surname when shown separately."
-    hints:
-      - "Look for a standalone last name, family name, or surname field."
-  - id: "address"
-    label: "Address"
-    description: "A residential, mailing, or street address."
-    hints:
-      - "May span multiple lines."
-      - "Include the full visible address region in the box."
-  - id: "height"
-    label: "Height"
-    description: "A person's height measurement."
-    hints:
-      - "Look for height labels, abbreviations, or nearby measurement values."
-  - id: "sex"
-    label: "Sex"
-    description: "A person's sex or gender marker."
-    hints:
-      - "Look for sex or gender labels and the adjacent marker value."
-  - id: "dob"
-    label: "Date of birth"
-    description: "A person's birth date."
-    hints:
-      - "Look for date of birth labels or DOB abbreviations."
-  - id: "license_number"
-    label: "License number"
-    description: "A driver's license or identification license number."
-    hints:
-      - "Look for license number labels or document number labels."
 
 output_dir: "output"
 logs_dir: "logs"
