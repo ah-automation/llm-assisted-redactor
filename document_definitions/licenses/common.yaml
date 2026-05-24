@@ -1,0 +1,203 @@
+id: "license.common"
+label: "Driver's license"
+description: "Common OCR text fields for Canadian and US driver's license or ID card images."
+
+fragment_tags:
+  field_label:
+    label: "Printed field label"
+    text_contains:
+      - "license"
+      - "licence"
+      - "driver"
+      - "dl"
+      - "dln"
+      - "id no"
+      - "id number"
+      - "customer identifier"
+      - "document number"
+      - "name"
+      - "surname"
+      - "last name"
+      - "given name"
+      - "first name"
+      - "address"
+      - "addr"
+      - "date of birth"
+      - "dob"
+      - "birth"
+      - "sex"
+      - "height"
+      - "hgt"
+      - "eyes"
+      - "eye color"
+
+field_defaults:
+  max_value_fragments: 1
+
+fields:
+  license_number:
+    label: "Driver's license or ID number"
+    type: "text"
+    required: true
+    description: "The driver's license, ID card, customer, or document number."
+    anchors:
+      - "Driver's license number"
+      - "Driver license number"
+      - "License number"
+      - "Licence number"
+      - "DL"
+      - "DLN"
+      - "ID number"
+      - "ID No"
+      - "Customer identifier"
+      - "Document number"
+      - "Number"
+    redaction:
+      mode: "ocr_box"
+
+  name_full:
+    label: "Full name"
+    type: "text"
+    required: true
+    max_value_fragments: 3
+    description: "The full visible cardholder name when the name appears as one combined field."
+    anchors:
+      - "Name"
+      - "Full name"
+      - "Cardholder name"
+      - "Customer name"
+    redaction:
+      mode: "ocr_box"
+
+  surname:
+    label: "Surname or last name"
+    type: "text"
+    required: false
+    description: "The cardholder's surname, family name, or last name when shown separately."
+    anchors:
+      - "Surname"
+      - "Last name"
+      - "Family name"
+      - "LN"
+    redaction:
+      mode: "ocr_box"
+
+  given_names:
+    label: "Given names or first name"
+    type: "text"
+    required: false
+    max_value_fragments: 2
+    description: "The cardholder's given names or first name when shown separately."
+    anchors:
+      - "Given names"
+      - "Given name"
+      - "First name"
+      - "FN"
+    redaction:
+      mode: "ocr_box"
+
+  address:
+    label: "Address"
+    type: "text"
+    required: true
+    max_value_fragments: 4
+    description: "The cardholder's residential, mailing, or street address."
+    anchors:
+      - "Address"
+      - "Addr"
+      - "Street address"
+      - "Residence address"
+    redaction:
+      mode: "ocr_box"
+
+  date_of_birth:
+    label: "Date of birth"
+    type: "text"
+    required: true
+    description: "The cardholder's date of birth."
+    anchors:
+      - "Date of birth"
+      - "DOB"
+      - "Birth date"
+      - "Birth"
+    redaction:
+      mode: "ocr_box"
+
+  issue_date:
+    label: "Issue date"
+    type: "document_metadata"
+    required: false
+    description: "The date the driver's license or ID card was issued."
+    anchors:
+      - "Issue date"
+      - "Date of issue"
+      - "Issued"
+      - "ISS"
+    redaction:
+      mode: "ocr_box"
+
+  expiry_date:
+    label: "Expiry date"
+    type: "document_metadata"
+    required: false
+    description: "The date the driver's license or ID card expires."
+    anchors:
+      - "Expiry date"
+      - "Expiration date"
+      - "Date of expiry"
+      - "Date of expiration"
+      - "Expires"
+      - "EXP"
+    redaction:
+      mode: "ocr_box"
+
+  sex:
+    label: "Sex"
+    type: "text"
+    required: true
+    description: "The cardholder's sex or gender marker."
+    anchors:
+      - "Sex"
+      - "Gender"
+    redaction:
+      mode: "ocr_box"
+
+  height:
+    label: "Height"
+    type: "text"
+    required: false
+    description: "The cardholder's height measurement."
+    anchors:
+      - "Height"
+      - "Hgt"
+      - "Ht"
+    redaction:
+      mode: "ocr_box"
+
+  eye_color:
+    label: "Eye color"
+    type: "text"
+    required: false
+    description: "The cardholder's eye color, when present."
+    anchors:
+      - "Eyes"
+      - "Eye color"
+      - "Eye colour"
+      - "EYE"
+    redaction:
+      mode: "ocr_box"
+
+  reference_number:
+    label: "Reference or document reference number"
+    type: "document_metadata"
+    required: false
+    description: "A card-specific reference, document discriminator, DD, or REF number that identifies the physical license card or card issuance."
+    anchors:
+      - "REF"
+      - "DD"
+      - "DD REF"
+      - "Document discriminator"
+      - "Document reference"
+      - "Reference number"
+    redaction:
+      mode: "ocr_box"
