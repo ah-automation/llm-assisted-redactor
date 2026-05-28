@@ -122,17 +122,21 @@ def make_run_paths(config, image_path):
     return overlay_path, log_path
 
 
+def compact_box(box):
+    if not isinstance(box, dict):
+        return None
+    return [box.get("x1"), box.get("y1"), box.get("x2"), box.get("y2")]
+
+
 def compact_fragments(document_definition, ocr_manifest):
     fragments = []
     for fragment in ocr_manifest.get("fragments", []):
-        text = fragment.get("text", "")
         item = {
             "id": fragment.get("id"),
-            "box": fragment.get("box"),
-            "confidence": fragment.get("confidence"),
+            "box": compact_box(fragment.get("box")),
         }
         if "text" in fragment:
-            item["text"] = text
+            item["text"] = fragment.get("text", "")
         elif "text_length" in fragment:
             item["text_length"] = fragment.get("text_length")
         fragments.append(item)
@@ -142,8 +146,7 @@ def compact_fragments(document_definition, ocr_manifest):
 def compact_fragment(fragment):
     item = {
         "id": fragment.get("id"),
-        "box": fragment.get("box"),
-        "confidence": fragment.get("confidence"),
+        "box": compact_box(fragment.get("box")),
     }
     if "text" in fragment:
         item["text"] = fragment.get("text", "")
@@ -168,43 +171,20 @@ def build_field_association_prompt(document_definition, field, ocr_manifest):
             "description": field.get("description"),
             "anchors": field.get("anchors", []),
             "match_hints": field.get("match_hints", []),
-            "excluded_fragment_tags": field.get("excluded_fragment_tags", []),
             "max_value_fragments": field.get("max_value_fragments"),
-            "redaction": field.get("redaction", {}),
         },
         "ocr_fragments": compact_fragments(document_definition, ocr_manifest),
     }
 
     return (
-        "You are matching OCR fragments to one configured document field.\n"
-        "The OCR text may contain typos, missing spaces, extra numbers, or multiple languages in one fragment.\n"
-        "Return only valid JSON. Do not include markdown or explanations.\n"
-        "Do not transcribe or correct any PII values.\n"
-        "Use OCR fragment ids only.\n"
-        "Treat the field anchors as conceptual labels, not exact required text.\n"
-        "First identify the OCR fragment or fragments that best represent the field label, even if the OCR text is noisy.\n"
-        "For example, a fragment like 'dateof issue', 'dateofissue', or '9datumvanafgifte/dateof issue' can represent the conceptual label 'Date of issue'.\n"
-        "Put label fragments in anchor_fragment_ids.\n"
-        "Then choose the nearest common-sense OCR fragment or fragments that contain the field value.\n"
-        "For ordinary text fields, values are usually immediately to the right of or below the matching label.\n"
-        "Do not put the same fragment id in both anchor_fragment_ids and value_fragment_ids.\n"
-        "Do not select the label/header fragment as the value.\n"
-        "For MRZ fields, choose OCR fragments containing machine-readable zone text, often with < characters.\n"
-        "If max_value_fragments is set, choose no more than that many value fragments.\n"
-        "If the field is not visible or cannot be matched, use empty arrays.\n"
-        "Return exactly one match object in the matches array.\n"
-        "Use this exact JSON shape:\n"
-        "{\n"
-        '  "matches": [\n'
-        "    {\n"
-        f'      "field_id": "{field.get("id")}",\n'
-        '      "value_fragment_ids": ["ocr_0001"],\n'
-        '      "anchor_fragment_ids": ["ocr_0002"],\n'
-        '      "confidence": 0.0,\n'
-        '      "notes": "short non-PII reason"\n'
-        "    }\n"
-        "  ]\n"
-        "}\n\n"
+        "Match one document field to OCR fragments. Return valid JSON only. Use ids only; never transcribe PII.\n"
+        "OCR text may have typos, missing spaces, extra numbers, or multiple languages.\n"
+        "Anchors are conceptual labels, not exact text. First choose label ids for anchor_fragment_ids.\n"
+        "Then choose the nearest sensible value ids for value_fragment_ids, usually right of or below the label.\n"
+        "Never use the same id as both anchor and value. Do not select a label/header as a value.\n"
+        "For MRZ fields, choose fragments with machine-readable text such as < characters.\n"
+        "Respect max_value_fragments. If not visible or unsure, use empty arrays.\n"
+        f'Return exactly: {{"matches":[{{"field_id":"{field.get("id")}","value_fragment_ids":["ocr_0001"],"anchor_fragment_ids":["ocr_0002"],"confidence":0.0,"notes":"short non-PII reason"}}]}}\n'
         "Input JSON:\n"
         f"{json.dumps(request, separators=(',', ':'))}"
     )
@@ -223,30 +203,12 @@ def build_repeat_detection_prompt(document_definition, known_fields, remaining_f
     }
 
     return (
-        "You are finding repeated OCR fragments for values that were already matched on this document.\n"
-        "The OCR text may contain typos, missing spaces, punctuation differences, or mistaken characters.\n"
-        "Return only valid JSON. Do not include markdown or explanations.\n"
-        "Do not transcribe or correct any PII values in your response.\n"
-        "Use OCR fragment ids only.\n"
-        "Do not discover new PII categories. Only look for repeats or near-repeats of known_fields.\n"
-        "A repeat may be unlabeled, smaller, vertical, lower confidence, or slightly misread by OCR.\n"
-        "Only select a remaining fragment when it appears to repeat one of the known field values.\n"
-        "Return one match object per repeated occurrence.\n"
-        "Each value_fragment_ids array should contain exactly one repeated OCR fragment id.\n"
-        "Use anchor_fragment_ids only if a nearby label explains the repeated value; otherwise use an empty array.\n"
-        "If no repeats are found, return an empty matches array.\n"
-        "Use this exact JSON shape:\n"
-        "{\n"
-        '  "matches": [\n'
-        "    {\n"
-        '      "field_id": "license_number",\n'
-        '      "value_fragment_ids": ["ocr_0001"],\n'
-        '      "anchor_fragment_ids": [],\n'
-        '      "confidence": 0.0,\n'
-        '      "notes": "short non-PII reason"\n'
-        "    }\n"
-        "  ]\n"
-        "}\n\n"
+        "Find repeats of already matched field values. Return valid JSON only. Use ids only; never transcribe PII.\n"
+        "Do not discover new PII categories. Select only remaining fragments that are repeats or near-repeats of known_fields.\n"
+        "Repeats may be unlabeled, smaller, vertical, low confidence, or slightly misread by OCR.\n"
+        "Return one match per repeated occurrence. Each value_fragment_ids array should contain one repeated id.\n"
+        "Use anchor_fragment_ids only for a nearby label; otherwise []. If none, return {\"matches\":[]}.\n"
+        'Return shape: {"matches":[{"field_id":"license_number","value_fragment_ids":["ocr_0001"],"anchor_fragment_ids":[],"confidence":0.0,"notes":"short non-PII reason"}]}\n'
         "Input JSON:\n"
         f"{json.dumps(request, separators=(',', ':'))}"
     )
