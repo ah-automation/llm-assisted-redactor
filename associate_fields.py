@@ -139,6 +139,19 @@ def compact_fragments(document_definition, ocr_manifest):
     return fragments
 
 
+def compact_fragment(fragment):
+    item = {
+        "id": fragment.get("id"),
+        "box": fragment.get("box"),
+        "confidence": fragment.get("confidence"),
+    }
+    if "text" in fragment:
+        item["text"] = fragment.get("text", "")
+    elif "text_length" in fragment:
+        item["text_length"] = fragment.get("text_length")
+    return item
+
+
 def build_field_association_prompt(document_definition, field, ocr_manifest):
     request = {
         "document": {
@@ -187,6 +200,48 @@ def build_field_association_prompt(document_definition, field, ocr_manifest):
         f'      "field_id": "{field.get("id")}",\n'
         '      "value_fragment_ids": ["ocr_0001"],\n'
         '      "anchor_fragment_ids": ["ocr_0002"],\n'
+        '      "confidence": 0.0,\n'
+        '      "notes": "short non-PII reason"\n'
+        "    }\n"
+        "  ]\n"
+        "}\n\n"
+        "Input JSON:\n"
+        f"{json.dumps(request, separators=(',', ':'))}"
+    )
+
+
+def build_repeat_detection_prompt(document_definition, known_fields, remaining_fragments):
+    request = {
+        "document": {
+            "id": document_definition.get("id"),
+            "label": document_definition.get("label"),
+            "description": document_definition.get("description"),
+            "hints": document_definition.get("document_hints", []),
+        },
+        "known_fields": known_fields,
+        "remaining_ocr_fragments": [compact_fragment(fragment) for fragment in remaining_fragments],
+    }
+
+    return (
+        "You are finding repeated OCR fragments for values that were already matched on this document.\n"
+        "The OCR text may contain typos, missing spaces, punctuation differences, or mistaken characters.\n"
+        "Return only valid JSON. Do not include markdown or explanations.\n"
+        "Do not transcribe or correct any PII values in your response.\n"
+        "Use OCR fragment ids only.\n"
+        "Do not discover new PII categories. Only look for repeats or near-repeats of known_fields.\n"
+        "A repeat may be unlabeled, smaller, vertical, lower confidence, or slightly misread by OCR.\n"
+        "Only select a remaining fragment when it appears to repeat one of the known field values.\n"
+        "Return one match object per repeated occurrence.\n"
+        "Each value_fragment_ids array should contain exactly one repeated OCR fragment id.\n"
+        "Use anchor_fragment_ids only if a nearby label explains the repeated value; otherwise use an empty array.\n"
+        "If no repeats are found, return an empty matches array.\n"
+        "Use this exact JSON shape:\n"
+        "{\n"
+        '  "matches": [\n'
+        "    {\n"
+        '      "field_id": "license_number",\n'
+        '      "value_fragment_ids": ["ocr_0001"],\n'
+        '      "anchor_fragment_ids": [],\n'
         '      "confidence": 0.0,\n'
         '      "notes": "short non-PII reason"\n'
         "    }\n"
@@ -297,6 +352,114 @@ def parse_matches(raw_response):
         raise ValueError("JSON response must contain a 'matches' list.")
 
     return matches
+
+
+def get_repeat_detection_config(document_definition):
+    repeat_detection = document_definition.get("repeat_detection") or {}
+    if not isinstance(repeat_detection, dict):
+        return {}
+    return repeat_detection
+
+
+def is_repeat_detection_enabled(document_definition):
+    return bool(get_repeat_detection_config(document_definition).get("enabled", False))
+
+
+def build_known_repeat_fields(document_definition, matches, fields_by_id, fragments_by_id):
+    repeat_config = get_repeat_detection_config(document_definition)
+    configured_field_ids = repeat_config.get("field_ids") or []
+    allowed_field_ids = set(configured_field_ids)
+
+    known_fields = []
+    for match in matches:
+        field_id = match.get("field_id")
+        value_ids = match.get("value_fragment_ids", [])
+        if allowed_field_ids and field_id not in allowed_field_ids:
+            continue
+        if not value_ids:
+            continue
+
+        field = fields_by_id.get(field_id, {})
+        source_fragments = [
+            fragments_by_id[fragment_id]
+            for fragment_id in value_ids
+            if fragment_id in fragments_by_id
+        ]
+        if not source_fragments:
+            continue
+
+        known_fields.append(
+            {
+                "field_id": field_id,
+                "label": field.get("label"),
+                "description": field.get("description"),
+                "source_fragment_ids": [fragment["id"] for fragment in source_fragments],
+                "source_fragments": [compact_fragment(fragment) for fragment in source_fragments],
+            }
+        )
+
+    return known_fields
+
+
+def find_repeat_matches(config, document_definition, ocr_manifest, valid_matches, fields_by_id, fragments_by_id):
+    if not is_repeat_detection_enabled(document_definition):
+        return [], {
+            "enabled": False,
+            "status": "skipped",
+            "reason": "Repeat detection is not enabled for this document definition.",
+        }
+
+    known_fields = build_known_repeat_fields(document_definition, valid_matches, fields_by_id, fragments_by_id)
+    matched_value_ids = {
+        fragment_id
+        for match in valid_matches
+        for fragment_id in match.get("value_fragment_ids", [])
+    }
+    remaining_fragments = [
+        fragment
+        for fragment in ocr_manifest.get("fragments", [])
+        if fragment.get("id") not in matched_value_ids
+    ]
+
+    result = {
+        "enabled": True,
+        "status": "started",
+        "known_field_count": len(known_fields),
+        "remaining_fragment_count": len(remaining_fragments),
+    }
+
+    if not known_fields or not remaining_fragments:
+        result.update(
+            {
+                "status": "skipped",
+                "reason": "No known fields or remaining OCR fragments were available for repeat detection.",
+            }
+        )
+        return [], result
+
+    prompt = build_repeat_detection_prompt(document_definition, known_fields, remaining_fragments)
+    raw_response, diagnostic = call_llm(config, prompt)
+    result["llm_diagnostic"] = diagnostic
+
+    try:
+        matches = parse_matches(raw_response)
+        result.update(
+            {
+                "status": "completed",
+                "match_count": len(matches),
+            }
+        )
+        return matches, result
+    except (json.JSONDecodeError, ValueError) as error:
+        result.update(
+            {
+                "status": "llm_response_error",
+                "error": "LLM response was not valid JSON in the expected shape.",
+                "error_details": str(error),
+                "raw_response": raw_response,
+            }
+        )
+        return [], result
 
 
 def associate_fields(config, document_definition, ocr_manifest):
@@ -607,7 +770,23 @@ def main():
         fragments = ocr_manifest.get("fragments", [])
         fragments_by_id = {fragment["id"]: fragment for fragment in fragments}
         valid_matches, rejected_matches = validate_matches(matches, fields_by_id, fragments_by_id, document_definition)
+        repeat_matches, repeat_result = find_repeat_matches(
+            config,
+            document_definition,
+            ocr_manifest,
+            valid_matches,
+            fields_by_id,
+            fragments_by_id,
+        )
+        valid_repeat_matches, rejected_repeat_matches = validate_matches(
+            repeat_matches,
+            fields_by_id,
+            fragments_by_id,
+            document_definition,
+        )
         redaction_boxes = build_redaction_boxes(valid_matches, fragments_by_id, fields_by_id)
+        repeat_redaction_boxes = build_redaction_boxes(valid_repeat_matches, fragments_by_id, fields_by_id)
+        redaction_boxes.extend(repeat_redaction_boxes)
         save_match_overlay(image_path, overlay_path, redaction_boxes)
 
         manifest.update(
@@ -615,6 +794,15 @@ def main():
                 "status": "completed",
                 "valid_matches": valid_matches,
                 "rejected_matches": rejected_matches,
+                "repeat_detection": {
+                    **repeat_result,
+                    "valid_matches": valid_repeat_matches,
+                    "rejected_matches": rejected_repeat_matches,
+                    "redaction_boxes": repeat_redaction_boxes,
+                    "valid_match_count": len(valid_repeat_matches),
+                    "rejected_match_count": len(rejected_repeat_matches),
+                    "redaction_box_count": len(repeat_redaction_boxes),
+                },
                 "redaction_boxes": redaction_boxes,
                 "valid_match_count": len(valid_matches),
                 "rejected_match_count": len(rejected_matches),

@@ -2,6 +2,17 @@ id: "license.common"
 label: "Driver's license"
 description: "Common OCR text fields for Canadian and US driver's license or ID card images."
 
+repeat_detection:
+  enabled: true
+  field_ids:
+    - "license_number"
+    - "name_full"
+    - "surname"
+    - "given_names"
+    - "address"
+    - "date_of_birth"
+    - "reference_number"
+
 fragment_tags:
   field_label:
     label: "Printed field label"

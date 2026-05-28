@@ -55,7 +55,27 @@ def run_pipeline(image_path, config_path, document_definition_path, include_text
         fragments_by_id,
         document_definition,
     )
+    repeat_matches, repeat_result = associate_fields.find_repeat_matches(
+        config,
+        document_definition,
+        ocr_manifest,
+        valid_matches,
+        fields_by_id,
+        fragments_by_id,
+    )
+    valid_repeat_matches, rejected_repeat_matches = associate_fields.validate_matches(
+        repeat_matches,
+        fields_by_id,
+        fragments_by_id,
+        document_definition,
+    )
     redaction_boxes = associate_fields.build_redaction_boxes(valid_matches, fragments_by_id, fields_by_id)
+    repeat_redaction_boxes = associate_fields.build_redaction_boxes(
+        valid_repeat_matches,
+        fragments_by_id,
+        fields_by_id,
+    )
+    redaction_boxes.extend(repeat_redaction_boxes)
     face_boxes = []
     face_error = None
     if face_detect.is_enabled(config):
@@ -84,6 +104,15 @@ def run_pipeline(image_path, config_path, document_definition_path, include_text
         "field_results": field_results,
         "valid_matches": valid_matches,
         "rejected_matches": rejected_matches,
+        "repeat_detection": {
+            **repeat_result,
+            "valid_matches": valid_repeat_matches,
+            "rejected_matches": rejected_repeat_matches,
+            "redaction_boxes": repeat_redaction_boxes,
+            "valid_match_count": len(valid_repeat_matches),
+            "rejected_match_count": len(rejected_repeat_matches),
+            "redaction_box_count": len(repeat_redaction_boxes),
+        },
         "redaction_boxes": redaction_boxes,
         "face_detection": {
             "enabled": face_detect.is_enabled(config),
