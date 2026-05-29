@@ -1,0 +1,206 @@
+id: "cheque.common"
+label: "Cheque"
+description: "Common OCR-readable printed fields for cheque and check images."
+
+document_hints:
+  - "This definition targets printed cheque information that OCR can read."
+  - "Handwritten payee, handwritten amounts, memo text, and signatures are out of scope unless OCR detects them clearly."
+  - "Prefer redacting printed identifiers and MICR-style banking numbers over handwritten content."
+
+repeat_detection:
+  enabled: true
+  field_ids:
+    - "account_holder_name"
+    - "account_holder_address"
+    - "account_holder_phone"
+    - "payee_name"
+    - "cheque_number"
+    - "bank_account_number"
+    - "routing_number"
+    - "transit_number"
+    - "institution_number"
+    - "micr_line"
+
+fragment_tags:
+  field_label:
+    label: "Printed field label"
+    text_contains:
+      - "pay to"
+      - "payee"
+      - "date"
+      - "memo"
+      - "account"
+      - "routing"
+      - "transit"
+      - "institution"
+      - "cheque"
+      - "check"
+      - "tel"
+      - "phone"
+
+field_defaults:
+  max_value_fragments: 1
+
+fields:
+  account_holder_name:
+    label: "Account holder name"
+    type: "text"
+    required: false
+    max_value_fragments: 3
+    description: "The printed personal or business name of the cheque account holder. Do not choose the bank name."
+    anchors:
+      - "Account holder"
+      - "Name"
+      - "Business name"
+      - "Company name"
+    match_hints:
+      - "This is often printed near the top left of a cheque, above or near the account holder address."
+    redaction:
+      mode: "ocr_box"
+
+  account_holder_address:
+    label: "Account holder address"
+    type: "text"
+    required: false
+    max_value_fragments: 4
+    description: "The printed mailing or business address of the cheque account holder. Do not choose the bank branch address."
+    anchors:
+      - "Address"
+      - "Account holder address"
+      - "Mailing address"
+      - "Business address"
+    match_hints:
+      - "This is often printed near the top left of a cheque, below the account holder name."
+    redaction:
+      mode: "ocr_box"
+
+  account_holder_phone:
+    label: "Account holder phone number"
+    type: "text"
+    required: false
+    description: "The account holder's printed phone or contact number. Do not choose bank, branch, customer service, or security feature phone numbers."
+    anchors:
+      - "Phone"
+      - "Telephone"
+      - "Tel"
+      - "Mobile"
+      - "Contact"
+    match_hints:
+      - "Prefer a phone number near the account holder name and address."
+      - "A combined fragment such as 'TEL:03-3474-2120' should be treated as the phone value."
+    redaction:
+      mode: "ocr_box"
+
+  payee_name:
+    label: "Payee name"
+    type: "text"
+    required: false
+    max_value_fragments: 3
+    description: "The readable payee or recipient value on the 'Pay to the order of' line. Do not choose account holder, payer, drawer, bank, or address details."
+    anchors:
+      - "Pay to the order of"
+      - "Pay to"
+      - "Order of"
+      - "Payee"
+      - "Pay"
+    match_hints:
+      - "The anchor may be split across fragments such as 'PAY TO THE' and 'ORDER OF'."
+      - "Choose the nearby value written or printed on the payee line, usually to the right of or below the anchor."
+      - "Prefer a value in the same horizontal band as the payee anchors."
+      - "Synthetic values such as 'Sample Check' should still be treated as payee values."
+    redaction:
+      mode: "ocr_box"
+
+  cheque_number:
+    label: "Cheque number"
+    type: "document_metadata"
+    required: false
+    description: "The cheque or check number, often printed near the top right and repeated in the MICR line."
+    anchors:
+      - "Cheque number"
+      - "Check number"
+      - "Cheque No"
+      - "Check No"
+      - "No"
+    redaction:
+      mode: "ocr_box"
+
+  bank_account_number:
+    label: "Bank account number"
+    type: "financial_identifier"
+    required: true
+    max_value_fragments: 3
+    description: "The bank account number printed on the cheque or embedded in the MICR line."
+    anchors:
+      - "Account number"
+      - "Account No"
+      - "Account"
+      - "Acct"
+      - "MICR"
+    redaction:
+      mode: "ocr_box"
+
+  routing_number:
+    label: "Routing number"
+    type: "financial_identifier"
+    required: false
+    max_value_fragments: 2
+    description: "A US-style routing number printed on the cheque or embedded in the MICR line."
+    anchors:
+      - "Routing number"
+      - "Routing No"
+      - "Routing"
+      - "ABA"
+      - "MICR"
+    redaction:
+      mode: "ocr_box"
+
+  transit_number:
+    label: "Transit number"
+    type: "financial_identifier"
+    required: false
+    max_value_fragments: 2
+    description: "A Canadian-style transit or branch number printed on the cheque or embedded in the MICR line."
+    anchors:
+      - "Transit number"
+      - "Transit No"
+      - "Transit"
+      - "Branch number"
+      - "Branch No"
+      - "MICR"
+    redaction:
+      mode: "ocr_box"
+
+  institution_number:
+    label: "Institution number"
+    type: "financial_identifier"
+    required: false
+    max_value_fragments: 2
+    description: "A Canadian-style financial institution number printed on the cheque or embedded in the MICR line."
+    anchors:
+      - "Institution number"
+      - "Institution No"
+      - "Institution"
+      - "Bank number"
+      - "MICR"
+    redaction:
+      mode: "ocr_box"
+
+  micr_line:
+    label: "MICR line"
+    type: "financial_identifier"
+    required: false
+    max_value_fragments: 6
+    description: "The machine-readable cheque number, transit/routing, institution, and account number line near the bottom of the cheque."
+    anchors:
+      - "MICR"
+      - "Routing"
+      - "Transit"
+      - "Account"
+      - "Cheque"
+      - "Check"
+    match_hints:
+      - "Prefer OCR fragments near the bottom edge that contain long numeric banking identifiers or MICR-like symbols."
+      - "The MICR line may be split into multiple OCR fragments."
+    redaction:
+      mode: "ocr_box"
