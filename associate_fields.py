@@ -377,10 +377,16 @@ def find_repeat_matches(config, document_definition, ocr_manifest, valid_matches
         for match in valid_matches
         for fragment_id in match.get("value_fragment_ids", [])
     }
+    matched_anchor_ids = {
+        fragment_id
+        for match in valid_matches
+        for fragment_id in match.get("anchor_fragment_ids", [])
+    }
     remaining_fragments = [
         fragment
         for fragment in ocr_manifest.get("fragments", [])
         if fragment.get("id") not in matched_value_ids
+        and fragment.get("id") not in matched_anchor_ids
     ]
 
     result = {
@@ -388,6 +394,7 @@ def find_repeat_matches(config, document_definition, ocr_manifest, valid_matches
         "status": "started",
         "known_field_count": len(known_fields),
         "remaining_fragment_count": len(remaining_fragments),
+        "excluded_anchor_fragment_count": len(matched_anchor_ids),
     }
 
     if not known_fields or not remaining_fragments:
@@ -536,10 +543,11 @@ def limit_value_fragments(value_ids, anchor_ids, field, fragments_by_id):
     return sorted(value_ids, key=sort_key)[:max_value_fragments]
 
 
-def validate_matches(matches, fields_by_id, fragments_by_id, document_definition):
+def validate_matches(matches, fields_by_id, fragments_by_id, document_definition, disallowed_value_ids=None):
     valid_matches = []
     rejected_matches = []
     fragment_ids = set(fragments_by_id)
+    disallowed_value_ids = set(disallowed_value_ids or [])
 
     for index, match in enumerate(matches):
         if not isinstance(match, dict):
@@ -569,6 +577,18 @@ def validate_matches(matches, fields_by_id, fragments_by_id, document_definition
                     "field_id": field_id,
                     "error": "Unknown fragment ids.",
                     "unknown_fragment_ids": unknown_ids,
+                }
+            )
+            continue
+
+        disallowed_ids = sorted(fragment_id for fragment_id in value_ids if fragment_id in disallowed_value_ids)
+        if disallowed_ids:
+            rejected_matches.append(
+                {
+                    "index": index,
+                    "field_id": field_id,
+                    "error": "Disallowed fragment ids were selected as values.",
+                    "disallowed_value_fragment_ids": disallowed_ids,
                 }
             )
             continue
@@ -745,6 +765,11 @@ def main():
             fields_by_id,
             fragments_by_id,
             document_definition,
+            disallowed_value_ids={
+                fragment_id
+                for match in valid_matches
+                for fragment_id in match.get("anchor_fragment_ids", [])
+            },
         )
         redaction_boxes = build_redaction_boxes(valid_matches, fragments_by_id, fields_by_id)
         repeat_redaction_boxes = build_redaction_boxes(valid_repeat_matches, fragments_by_id, fields_by_id)

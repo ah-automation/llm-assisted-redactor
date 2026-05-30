@@ -1,0 +1,306 @@
+id: "health_insurance_card.common"
+label: "Health insurance card"
+description: "Common OCR-readable fields for health insurance, benefits, and prescription drug cards."
+
+document_hints:
+  - "This definition targets member/person identifiers and plan-specific identifiers."
+  - "Do not redact insurer branding, generic coverage labels, member services phone numbers, websites, or payer mailing addresses unless they are selected as configured fields."
+  - "Dependent names may appear as separate rows or in a family/member list."
+
+repeat_detection:
+  enabled: true
+  field_ids:
+    - "member_name"
+    - "surname"
+    - "given_names"
+    - "dependent_names"
+    - "member_id"
+    - "subscriber_id"
+    - "policy_number"
+    - "group_number"
+    - "certificate_number"
+    - "plan_number"
+    - "contract_number"
+    - "rx_id"
+    - "date_of_birth"
+
+fragment_tags:
+  insurer_contact:
+    label: "Insurer contact information"
+    text_contains:
+      - "member services"
+      - "customer service"
+      - "provider services"
+      - "claims"
+      - "www."
+      - ".com"
+      - "phone"
+      - "tel"
+
+field_defaults:
+  max_value_fragments: 1
+
+fields:
+  member_name:
+    label: "Member name"
+    type: "text"
+    required: true
+    max_value_fragments: 3
+    description: "The primary member, subscriber, cardholder, employee, or insured person's name when shown as one combined field."
+    anchors:
+      - "Member name"
+      - "Member"
+      - "Subscriber"
+      - "Subscriber name"
+      - "Cardholder"
+      - "Cardholder name"
+      - "Insured"
+      - "Insured name"
+      - "Employee"
+      - "Employee name"
+      - "Name"
+    redaction:
+      mode: "ocr_box"
+
+  surname:
+    label: "Surname or last name"
+    type: "text"
+    required: false
+    max_value_fragments: 2
+    description: "The member, subscriber, cardholder, employee, or insured person's surname or last name when shown separately."
+    anchors:
+      - "Surname"
+      - "Last name"
+      - "Family name"
+      - "Nom"
+    redaction:
+      mode: "ocr_box"
+
+  given_names:
+    label: "Given names or first name"
+    type: "text"
+    required: false
+    max_value_fragments: 3
+    description: "The member, subscriber, cardholder, employee, or insured person's given names or first name when shown separately."
+    anchors:
+      - "Given names"
+      - "Given name"
+      - "First name"
+      - "Forename"
+      - "Prenoms"
+      - "Prénoms"
+    redaction:
+      mode: "ocr_box"
+
+  dependent_names:
+    label: "Dependent names"
+    type: "text"
+    required: false
+    max_value_fragments: 8
+    description: "Names of dependents, spouse, children, covered family members, or listed participants."
+    anchors:
+      - "Dependent"
+      - "Dependents"
+      - "Dependent name"
+      - "Covered dependents"
+      - "Spouse"
+      - "Child"
+      - "Family member"
+      - "Covered member"
+    redaction:
+      mode: "ocr_box"
+
+  member_id:
+    label: "Member ID"
+    type: "document_metadata"
+    required: true
+    max_value_fragments: 3
+    description: "The member, card, participant, benefits, or health insurance identifier."
+    anchors:
+      - "Member ID"
+      - "Member No"
+      - "Member number"
+      - "Card ID"
+      - "Card No"
+      - "ID"
+      - "ID No"
+      - "Identification number"
+      - "Participant ID"
+      - "Benefits ID"
+    redaction:
+      mode: "ocr_box"
+
+  subscriber_id:
+    label: "Subscriber ID"
+    type: "document_metadata"
+    required: false
+    max_value_fragments: 3
+    description: "The subscriber, employee, or primary insured identifier."
+    anchors:
+      - "Subscriber ID"
+      - "Subscriber No"
+      - "Subscriber number"
+      - "Employee ID"
+      - "Employee No"
+      - "Primary insured ID"
+      - "Insured ID"
+    redaction:
+      mode: "ocr_box"
+
+  policy_number:
+    label: "Policy number"
+    type: "document_metadata"
+    required: false
+    max_value_fragments: 3
+    description: "The policy number or policy identifier."
+    anchors:
+      - "Policy"
+      - "Policy number"
+      - "Policy No"
+      - "Policy ID"
+    redaction:
+      mode: "ocr_box"
+
+  group_number:
+    label: "Group number"
+    type: "document_metadata"
+    required: false
+    max_value_fragments: 3
+    description: "The group number, group ID, employer group, or benefits group identifier."
+    anchors:
+      - "Group"
+      - "Group number"
+      - "Group No"
+      - "Group ID"
+      - "Grp"
+      - "Grp No"
+      - "Employer group"
+    redaction:
+      mode: "ocr_box"
+
+  certificate_number:
+    label: "Certificate number"
+    type: "document_metadata"
+    required: false
+    max_value_fragments: 3
+    description: "The certificate, coverage, or benefits certificate number."
+    anchors:
+      - "Certificate"
+      - "Certificate number"
+      - "Certificate No"
+      - "Cert"
+      - "Cert No"
+      - "Coverage number"
+    redaction:
+      mode: "ocr_box"
+
+  plan_number:
+    label: "Plan number"
+    type: "document_metadata"
+    required: false
+    max_value_fragments: 3
+    description: "A plan number, plan ID, class, division, or package identifier."
+    anchors:
+      - "Plan"
+      - "Plan number"
+      - "Plan No"
+      - "Plan ID"
+      - "Class"
+      - "Division"
+      - "Package"
+    redaction:
+      mode: "ocr_box"
+
+  contract_number:
+    label: "Contract number"
+    type: "document_metadata"
+    required: false
+    max_value_fragments: 3
+    description: "A contract, client, carrier, or account identifier associated with the health insurance plan."
+    anchors:
+      - "Contract"
+      - "Contract number"
+      - "Contract No"
+      - "Client number"
+      - "Client No"
+      - "Carrier ID"
+      - "Account number"
+    redaction:
+      mode: "ocr_box"
+
+  rx_bin:
+    label: "Rx BIN"
+    type: "document_metadata"
+    required: false
+    description: "The pharmacy benefit BIN identifier."
+    anchors:
+      - "BIN"
+      - "Rx BIN"
+      - "RxBIN"
+      - "Pharmacy BIN"
+    redaction:
+      mode: "ocr_box"
+
+  rx_pcn:
+    label: "Rx PCN"
+    type: "document_metadata"
+    required: false
+    description: "The pharmacy benefit PCN identifier."
+    anchors:
+      - "PCN"
+      - "Rx PCN"
+      - "RxPCN"
+      - "Processor control number"
+    redaction:
+      mode: "ocr_box"
+
+  rx_group:
+    label: "Rx group"
+    type: "document_metadata"
+    required: false
+    description: "The pharmacy benefit Rx group identifier."
+    anchors:
+      - "Rx Group"
+      - "RxGroup"
+      - "Rx Grp"
+      - "Pharmacy group"
+    redaction:
+      mode: "ocr_box"
+
+  rx_id:
+    label: "Rx ID"
+    type: "document_metadata"
+    required: false
+    max_value_fragments: 3
+    description: "The prescription benefit member or pharmacy ID."
+    anchors:
+      - "Rx ID"
+      - "RxID"
+      - "Pharmacy ID"
+      - "Prescription ID"
+    redaction:
+      mode: "ocr_box"
+
+  date_of_birth:
+    label: "Date of birth"
+    type: "text"
+    required: false
+    description: "The member or dependent date of birth."
+    anchors:
+      - "Date of birth"
+      - "DOB"
+      - "Birth date"
+      - "Born"
+    redaction:
+      mode: "ocr_box"
+
+  sex:
+    label: "Sex"
+    type: "text"
+    required: false
+    description: "The member or dependent sex or gender marker."
+    anchors:
+      - "Sex"
+      - "Gender"
+    redaction:
+      mode: "ocr_box"
