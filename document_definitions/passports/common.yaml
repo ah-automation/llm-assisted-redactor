@@ -180,5 +180,6 @@ fields:
     match_hints:
       - "Usually two lines near the bottom."
       - "Often contains many < characters."
+      - "Choose fragments with machine-readable text such as < characters."
     redaction:
       mode: "ocr_box"

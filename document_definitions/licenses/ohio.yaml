@@ -1,0 +1,44 @@
+extends: "common.yaml"
+
+id: "license.ohio"
+label: "Ohio driver's license"
+description: "Ohio-specific driver's license fields and routing hints."
+
+routing:
+  enabled: true
+  markers:
+    strong_add:
+      - "Ohio"
+      - "4dNO"
+      - "4d NO"
+      - "4d Number"
+    weak_add:
+      - "OH"
+
+field_overrides:
+  name_full:
+    enabled: false
+
+  license_number:
+    anchors_add:
+      - "4dNO"
+      - "4d NO"
+      - "4d Number"
+    match_hints_add:
+      - "On Ohio licenses, the 4dNO label may be missed by OCR. If the label is not visible, choose the nearby standalone alphanumeric license number value, not a date, class, expiry, restriction, height, eye color, or DD/REF value."
+
+  surname:
+    anchors_add:
+      - "1"
+      - "1/2"
+    match_hints_add:
+      - "On Ohio licenses, the surname may appear directly above the given name, and OCR may merge field numbers with the value, such as '12SURNAME'. Select that fragment as the surname value when it is above the given name."
+
+  given_names:
+    match_hints_add:
+      - "On Ohio licenses, the given name usually appears directly below the surname."
+
+  date_of_birth:
+    max_value_fragments: 2
+    match_hints_add:
+      - "On Ohio licenses, date of birth may appear as both a standalone date and as a combined fragment such as '3DOBYYYY-MM-DD'. Redact both when OCR detects both."

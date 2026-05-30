@@ -59,6 +59,10 @@ def extend_list(target, key, additions_key):
 
 
 def apply_additions(document_definition):
+    routing_markers = ((document_definition.get("routing") or {}).get("markers") or {})
+    extend_list(routing_markers, "strong", "strong_add")
+    extend_list(routing_markers, "weak", "weak_add")
+
     for tag_rule in (document_definition.get("fragment_tags") or {}).values():
         extend_list(tag_rule, "text_contains", "text_contains_add")
 
@@ -181,8 +185,8 @@ def build_field_association_prompt(document_definition, field, ocr_manifest):
         "OCR text may have typos, missing spaces, extra numbers, or multiple languages.\n"
         "Anchors are conceptual labels, not exact text. First choose label ids for anchor_fragment_ids.\n"
         "Then choose the nearest sensible value ids for value_fragment_ids, usually right of or below the label.\n"
-        "Never use the same id as both anchor and value. Do not select a label/header as a value.\n"
-        "For MRZ fields, choose fragments with machine-readable text such as < characters.\n"
+        "If a label and value are combined in the same OCR fragment, use that id as both anchor and value.\n"
+        "Do not select a label-only/header-only fragment as a value.\n"
         "Respect max_value_fragments. If not visible or unsure, use empty arrays.\n"
         f'Return exactly: {{"matches":[{{"field_id":"{field.get("id")}","value_fragment_ids":["ocr_0001"],"anchor_fragment_ids":["ocr_0002"],"confidence":0.0,"notes":"short non-PII reason"}}]}}\n'
         "Input JSON:\n"
