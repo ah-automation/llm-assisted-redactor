@@ -47,7 +47,8 @@ def run_pipeline(image_path, config_path, document_definition_path, include_text
         "reason": "A document definition was provided explicitly.",
     }
     if document_definition_path is None:
-        document_definition_path, routing_result = document_router.route_document(
+        document_definition_path, routing_result = document_router.route_document_with_llm(
+            config,
             ocr_manifest,
             document_definitions_dir,
         )
