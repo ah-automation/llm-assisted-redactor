@@ -2,6 +2,30 @@ id: "license.common"
 label: "Driver's license"
 description: "Common OCR text fields for Canadian and US driver's license or ID card images."
 
+routing:
+  enabled: true
+  threshold: 6
+  markers:
+    strong:
+      - "Driver's license"
+      - "Driver license"
+      - "Driver's licence"
+      - "Driver licence"
+      - "Permis de conduire"
+      - "License No"
+      - "Licence No"
+      - "DLN"
+    weak:
+      - "Date of birth"
+      - "DOB"
+      - "Sex"
+      - "Height"
+      - "Eyes"
+      - "Class"
+      - "Expiry"
+      - "Expires"
+      - "Address"
+
 repeat_detection:
   enabled: true
   field_ids:

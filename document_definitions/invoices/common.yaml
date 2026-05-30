@@ -2,6 +2,27 @@ id: "invoice.common"
 label: "Invoice"
 description: "Common OCR text fields for invoices, statements, bills, and order invoices."
 
+routing:
+  enabled: true
+  threshold: 6
+  markers:
+    strong:
+      - "Invoice"
+      - "Statement"
+      - "Bill To"
+      - "Ship To"
+      - "Amount Due"
+      - "Balance Due"
+      - "Payment Due"
+    weak:
+      - "Account number"
+      - "Customer"
+      - "Subtotal"
+      - "Total"
+      - "Tax"
+      - "Payment reference"
+      - "Due date"
+
 repeat_detection:
   enabled: true
   field_ids:

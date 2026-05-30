@@ -2,6 +2,30 @@ id: "health_insurance_card.common"
 label: "Health insurance card"
 description: "Common OCR-readable fields for health insurance, benefits, and prescription drug cards."
 
+routing:
+  enabled: true
+  threshold: 6
+  markers:
+    strong:
+      - "Health insurance"
+      - "Health care"
+      - "Healthcare"
+      - "Member ID"
+      - "Member Number"
+      - "RxBIN"
+      - "Rx BIN"
+      - "RxPCN"
+      - "Rx Group"
+    weak:
+      - "Policy"
+      - "Group"
+      - "Subscriber"
+      - "Certificate"
+      - "Plan"
+      - "Member"
+      - "Pharmacare"
+      - "Benefits"
+
 document_hints:
   - "This definition targets member/person identifiers and plan-specific identifiers."
   - "Do not redact insurer branding, generic coverage labels, member services phone numbers, websites, or payer mailing addresses unless they are selected as configured fields."

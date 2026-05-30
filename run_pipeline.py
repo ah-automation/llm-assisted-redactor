@@ -3,15 +3,17 @@ from datetime import datetime
 from pathlib import Path
 
 import associate_fields
+import document_router
 import face_detect
 import ocr_image
 import redact_from_matches
 
 
-def run_pipeline(image_path, config_path, document_definition_path, include_text):
+def run_pipeline(image_path, config_path, document_definition_path, include_text, document_definitions_dir):
     image_path = Path(image_path)
     config_path = Path(config_path)
-    document_definition_path = Path(document_definition_path)
+    document_definition_path = Path(document_definition_path) if document_definition_path else None
+    document_definitions_dir = Path(document_definitions_dir)
 
     config = ocr_image.load_config(config_path)
 
@@ -38,6 +40,22 @@ def run_pipeline(image_path, config_path, document_definition_path, include_text
 
     if not include_text:
         raise ValueError("Field association currently requires OCR text. Run with --include-text.")
+
+    routing_result = {
+        "enabled": False,
+        "status": "skipped",
+        "reason": "A document definition was provided explicitly.",
+    }
+    if document_definition_path is None:
+        document_definition_path, routing_result = document_router.route_document(
+            ocr_manifest,
+            document_definitions_dir,
+        )
+        if document_definition_path is None:
+            raise ValueError(
+                f"Document routing failed: {routing_result['status']} - {routing_result.get('reason', '')}"
+            )
+        routing_result["enabled"] = True
 
     document_definition = associate_fields.load_document_definition(document_definition_path)
     match_overlay_path, match_log_path = associate_fields.make_run_paths(config, image_path)
@@ -97,6 +115,7 @@ def run_pipeline(image_path, config_path, document_definition_path, include_text
         "config": str(config_path),
         "document_definition": str(document_definition_path),
         "document_type": document_definition.get("id"),
+        "routing": routing_result,
         "model": config.get("vlm", {}).get("model"),
         "created_at": datetime.now().isoformat(timespec="seconds"),
         "match_overlay": str(match_overlay_path),
@@ -164,7 +183,15 @@ def main():
     parser = argparse.ArgumentParser(description="Run OCR, field association, and redaction in sequence.")
     parser.add_argument("--image", required=True, help="Path to one image file.")
     parser.add_argument("--config", default="config.yaml", help="Path to config.yaml.")
-    parser.add_argument("--document-definition", required=True, help="Path to a document definition YAML file.")
+    parser.add_argument(
+        "--document-definition",
+        help="Path to a document definition YAML file. If omitted, OCR-based routing is used.",
+    )
+    parser.add_argument(
+        "--document-definitions-dir",
+        default="document_definitions",
+        help="Folder containing routable document definition YAML files.",
+    )
     parser.add_argument(
         "--include-text",
         action="store_true",
@@ -177,6 +204,7 @@ def main():
         args.config,
         args.document_definition,
         args.include_text,
+        args.document_definitions_dir,
     )
 
     print(f"Saved OCR log: {outputs['ocr_log']}")

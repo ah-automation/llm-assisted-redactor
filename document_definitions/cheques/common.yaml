@@ -2,6 +2,24 @@ id: "cheque.common"
 label: "Cheque"
 description: "Common OCR-readable printed fields for cheque and check images."
 
+routing:
+  enabled: true
+  threshold: 6
+  markers:
+    strong:
+      - "Pay to the order of"
+      - "PAY TO THE"
+      - "ORDER OF"
+      - "DOLLARS"
+      - "MEMO"
+    weak:
+      - "Cheque"
+      - "Check"
+      - "Routing"
+      - "Transit"
+      - "Account"
+      - "MICR"
+
 document_hints:
   - "This definition targets printed cheque information that OCR can read."
   - "Handwritten payee, handwritten amounts, memo text, and signatures are out of scope unless OCR detects them clearly."

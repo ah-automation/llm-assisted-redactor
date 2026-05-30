@@ -2,6 +2,25 @@ id: "passport.common"
 label: "Passport"
 description: "Common OCR text fields for passport biographical data pages."
 
+routing:
+  enabled: true
+  threshold: 6
+  markers:
+    strong:
+      - "Passport"
+      - "PASSEPORT"
+      - "Passport No"
+      - "Passport number"
+      - "Machine-readable zone"
+    weak:
+      - "Issuing country"
+      - "Nationality"
+      - "Date of birth"
+      - "Place of birth"
+      - "Date of issue"
+      - "Date of expiry"
+      - "<<"
+
 fragment_tags:
   mrz:
     label: "Machine-readable zone text"
