@@ -2,6 +2,7 @@ import argparse
 import json
 from datetime import datetime
 from pathlib import Path
+from uuid import uuid4
 
 import yaml
 from PIL import Image, ImageDraw
@@ -13,8 +14,32 @@ def load_config(config_path):
         return yaml.safe_load(file)
 
 
+def get_debug_config(config):
+    debug = config.get("debug") or {}
+    return debug if isinstance(debug, dict) else {}
+
+
+def is_debug_enabled(config):
+    return bool(get_debug_config(config).get("enabled", False))
+
+
+def debug_warning(config):
+    return get_debug_config(config).get(
+        "warning",
+        "WARNING: Debug mode may save OCR text, raw model responses, and overlays containing PII.",
+    )
+
+
+def debug_manifest(config):
+    return {
+        "enabled": is_debug_enabled(config),
+        "warning": debug_warning(config) if is_debug_enabled(config) else None,
+    }
+
+
 def make_run_paths(config, image_path):
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    unique_suffix = uuid4().hex[:8]
     image_stem = image_path.stem
 
     output_dir = Path(config.get("output_dir", "output"))
@@ -22,8 +47,8 @@ def make_run_paths(config, image_path):
     output_dir.mkdir(parents=True, exist_ok=True)
     logs_dir.mkdir(parents=True, exist_ok=True)
 
-    debug_path = output_dir / f"{image_stem}-ocr-debug-{timestamp}.png"
-    log_path = logs_dir / f"{image_stem}-ocr-{timestamp}.json"
+    debug_path = output_dir / f"{timestamp}-{unique_suffix}-{image_stem}-ocr-debug.png"
+    log_path = logs_dir / f"{timestamp}-{unique_suffix}-{image_stem}-ocr.json"
     return debug_path, log_path
 
 
@@ -139,25 +164,23 @@ def main():
     parser = argparse.ArgumentParser(description="Run local OCR on one image and save debug artifacts.")
     parser.add_argument("--image", required=True, help="Path to one image file.")
     parser.add_argument("--config", default="config.yaml", help="Path to config.yaml.")
-    parser.add_argument(
-        "--include-text",
-        action="store_true",
-        help="Include recognized OCR text in the JSON log. Use only with safe sample images.",
-    )
     args = parser.parse_args()
 
     image_path = Path(args.image)
     config_path = Path(args.config)
     config = load_config(config_path)
     debug_path, log_path = make_run_paths(config, image_path)
+    include_text = is_debug_enabled(config)
+    debug_enabled = is_debug_enabled(config)
 
     manifest = {
         "image": str(image_path),
         "config": str(config_path),
         "ocr_engine": "rapidocr",
         "created_at": datetime.now().isoformat(timespec="seconds"),
-        "debug_overlay": str(debug_path),
-        "include_text": args.include_text,
+        "debug": debug_manifest(config),
+        "debug_overlay": str(debug_path) if debug_enabled else None,
+        "include_text": include_text,
         "status": "started",
     }
 
@@ -166,17 +189,19 @@ def main():
             width, height = image.size
 
         fragments = run_ocr(image_path)
-        save_debug_overlay(image_path, debug_path, fragments)
+        if debug_enabled:
+            save_debug_overlay(image_path, debug_path, fragments)
 
         manifest.update(
             {
                 "status": "completed",
                 "image_size": {"width": width, "height": height},
                 "fragment_count": len(fragments),
-                "fragments": strip_text_if_needed(fragments, args.include_text),
+                "fragments": strip_text_if_needed(fragments, include_text),
             }
         )
-        print(f"Saved OCR debug overlay: {debug_path}")
+        if debug_enabled:
+            print(f"Saved OCR debug overlay: {debug_path}")
         print(f"Saved OCR log: {log_path}")
     except Exception as error:
         manifest.update(

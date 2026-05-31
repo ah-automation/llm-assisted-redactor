@@ -2,6 +2,7 @@ import argparse
 import json
 from datetime import datetime
 from pathlib import Path
+from uuid import uuid4
 
 import yaml
 from PIL import Image, ImageDraw
@@ -24,6 +25,7 @@ def save_json(path, data):
 
 def make_run_paths(config, image_path):
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    unique_suffix = uuid4().hex[:8]
     image_stem = image_path.stem
 
     output_dir = Path(config.get("output_dir", "output"))
@@ -31,8 +33,8 @@ def make_run_paths(config, image_path):
     output_dir.mkdir(parents=True, exist_ok=True)
     logs_dir.mkdir(parents=True, exist_ok=True)
 
-    output_path = output_dir / f"{image_stem}-hybrid-redacted-{timestamp}.png"
-    log_path = logs_dir / f"{image_stem}-hybrid-redaction-{timestamp}.json"
+    output_path = output_dir / f"{timestamp}-{unique_suffix}-{image_stem}-hybrid-redacted.png"
+    log_path = logs_dir / f"{timestamp}-{unique_suffix}-{image_stem}-hybrid-redaction.json"
     return output_path, log_path
 
 

@@ -1,6 +1,7 @@
 import argparse
 from datetime import datetime
 from pathlib import Path
+from uuid import uuid4
 
 import associate_fields
 import document_router
@@ -9,173 +10,222 @@ import ocr_image
 import redact_from_matches
 
 
-def run_pipeline(image_path, config_path, document_definition_path, include_text, document_definitions_dir):
+def make_run_paths(config, image_path):
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    unique_suffix = uuid4().hex[:8]
+    run_id = f"{timestamp}-{unique_suffix}-{image_path.stem}"
+
+    output_dir = Path(config.get("output_dir", "output"))
+    logs_dir = Path(config.get("logs_dir", "logs"))
+    output_dir.mkdir(parents=True, exist_ok=True)
+    logs_dir.mkdir(parents=True, exist_ok=True)
+
+    return {
+        "run_id": run_id,
+        "manifest": logs_dir / f"{run_id}-manifest.json",
+        "redacted_image": output_dir / f"{run_id}-redacted.png",
+        "ocr_debug_overlay": output_dir / f"{run_id}-ocr-debug.png",
+        "match_overlay": output_dir / f"{run_id}-field-matches.png",
+    }
+
+
+def run_pipeline(image_path, config_path, document_definition_path, document_definitions_dir):
     image_path = Path(image_path)
     config_path = Path(config_path)
     document_definition_path = Path(document_definition_path) if document_definition_path else None
     document_definitions_dir = Path(document_definitions_dir)
 
     config = ocr_image.load_config(config_path)
+    debug_enabled = ocr_image.is_debug_enabled(config)
+    run_paths = make_run_paths(config, image_path)
+    manifest_path = run_paths["manifest"]
+    redacted_path = run_paths["redacted_image"]
+    ocr_debug_path = run_paths["ocr_debug_overlay"]
+    match_overlay_path = run_paths["match_overlay"]
 
-    ocr_debug_path, ocr_log_path = ocr_image.make_run_paths(config, image_path)
-    ocr_fragments = ocr_image.run_ocr(image_path)
-    ocr_image.save_debug_overlay(image_path, ocr_debug_path, ocr_fragments)
-
-    with ocr_image.Image.open(image_path) as image:
-        width, height = image.size
-
-    ocr_manifest = {
+    manifest = {
+        "run_id": run_paths["run_id"],
         "image": str(image_path),
         "config": str(config_path),
-        "ocr_engine": "rapidocr",
+        "output": str(redacted_path),
+        "model": config.get("vlm", {}).get("model"),
         "created_at": datetime.now().isoformat(timespec="seconds"),
-        "debug_overlay": str(ocr_debug_path),
-        "include_text": include_text,
-        "status": "completed",
-        "image_size": {"width": width, "height": height},
-        "fragment_count": len(ocr_fragments),
-        "fragments": ocr_image.strip_text_if_needed(ocr_fragments, include_text),
+        "debug": ocr_image.debug_manifest(config),
+        "status": "started",
+        "artifacts": {
+            "manifest": str(manifest_path),
+            "redacted_image": str(redacted_path),
+            "ocr_debug_overlay": str(ocr_debug_path) if debug_enabled else None,
+            "match_overlay": str(match_overlay_path) if debug_enabled else None,
+        },
     }
-    ocr_image.save_json(ocr_log_path, ocr_manifest)
 
-    if not include_text:
-        raise ValueError("Field association currently requires OCR text. Run with --include-text.")
+    try:
+        ocr_fragments = ocr_image.run_ocr(image_path)
+        if debug_enabled:
+            ocr_image.save_debug_overlay(image_path, ocr_debug_path, ocr_fragments)
 
-    routing_result = {
-        "enabled": False,
-        "status": "skipped",
-        "reason": "A document definition was provided explicitly.",
-    }
-    if document_definition_path is None:
-        document_definition_path, routing_result = document_router.route_document_with_llm(
-            config,
-            ocr_manifest,
-            document_definitions_dir,
-        )
+        with ocr_image.Image.open(image_path) as image:
+            width, height = image.size
+
+        ocr_manifest_for_processing = {
+            "image": str(image_path),
+            "config": str(config_path),
+            "ocr_engine": "rapidocr",
+            "created_at": datetime.now().isoformat(timespec="seconds"),
+            "debug": ocr_image.debug_manifest(config),
+            "debug_overlay": str(ocr_debug_path) if debug_enabled else None,
+            "include_text": True,
+            "status": "completed",
+            "image_size": {"width": width, "height": height},
+            "fragment_count": len(ocr_fragments),
+            "fragments": ocr_fragments,
+        }
+        manifest["ocr"] = {
+            **ocr_manifest_for_processing,
+            "include_text": debug_enabled,
+            "fragments": ocr_image.strip_text_if_needed(ocr_fragments, debug_enabled),
+        }
+
+        routing_result = {
+            "enabled": False,
+            "status": "skipped",
+            "reason": "A document definition was provided explicitly.",
+        }
         if document_definition_path is None:
-            raise ValueError(
-                f"Document routing failed: {routing_result['status']} - {routing_result.get('reason', '')}"
+            document_definition_path, routing_result = document_router.route_document_with_llm(
+                config,
+                ocr_manifest_for_processing,
+                document_definitions_dir,
             )
-        routing_result["enabled"] = True
+            manifest["routing"] = routing_result
+            if document_definition_path is None:
+                raise ValueError(
+                    f"Document routing failed: {routing_result['status']} - {routing_result.get('reason', '')}"
+                )
+            routing_result["enabled"] = True
 
-    document_definition = associate_fields.load_document_definition(document_definition_path)
-    match_overlay_path, match_log_path = associate_fields.make_run_paths(config, image_path)
-    matches, field_results = associate_fields.associate_fields(
-        config,
-        document_definition,
-        ocr_manifest,
-    )
+        document_definition = associate_fields.load_document_definition(document_definition_path)
+        manifest["routing"] = routing_result
+        manifest["document_definition"] = str(document_definition_path)
+        manifest["document_type"] = document_definition.get("id")
 
-    fields_by_id = {field.get("id"): field for field in associate_fields.iter_fields(document_definition)}
-    fragments_by_id = {fragment["id"]: fragment for fragment in ocr_manifest["fragments"]}
-    valid_matches, rejected_matches = associate_fields.validate_matches(
-        matches,
-        fields_by_id,
-        fragments_by_id,
-        document_definition,
-    )
-    repeat_matches, repeat_result = associate_fields.find_repeat_matches(
-        config,
-        document_definition,
-        ocr_manifest,
-        valid_matches,
-        fields_by_id,
-        fragments_by_id,
-    )
-    valid_repeat_matches, rejected_repeat_matches = associate_fields.validate_matches(
-        repeat_matches,
-        fields_by_id,
-        fragments_by_id,
-        document_definition,
-    )
-    redaction_boxes = associate_fields.build_redaction_boxes(valid_matches, fragments_by_id, fields_by_id)
-    repeat_redaction_boxes = associate_fields.build_redaction_boxes(
-        valid_repeat_matches,
-        fragments_by_id,
-        fields_by_id,
-    )
-    redaction_boxes.extend(repeat_redaction_boxes)
-    face_boxes = []
-    face_error = None
-    if face_detect.is_enabled(config):
-        try:
-            face_boxes = face_detect.detect_faces(image_path, config)
-            redaction_boxes.extend(face_boxes)
-        except Exception as error:
-            face_error = {
+        matches, field_results = associate_fields.associate_fields(
+            config,
+            document_definition,
+            ocr_manifest_for_processing,
+        )
+
+        fields_by_id = {field.get("id"): field for field in associate_fields.iter_fields(document_definition)}
+        fragments_by_id = {fragment["id"]: fragment for fragment in ocr_manifest_for_processing["fragments"]}
+        valid_matches, rejected_matches = associate_fields.validate_matches(
+            matches,
+            fields_by_id,
+            fragments_by_id,
+            document_definition,
+            include_notes=debug_enabled,
+        )
+        repeat_matches, repeat_result = associate_fields.find_repeat_matches(
+            config,
+            document_definition,
+            ocr_manifest_for_processing,
+            valid_matches,
+            fields_by_id,
+            fragments_by_id,
+        )
+        valid_repeat_matches, rejected_repeat_matches = associate_fields.validate_matches(
+            repeat_matches,
+            fields_by_id,
+            fragments_by_id,
+            document_definition,
+            include_notes=debug_enabled,
+        )
+        text_redaction_boxes = associate_fields.build_redaction_boxes(valid_matches, fragments_by_id, fields_by_id)
+        repeat_redaction_boxes = associate_fields.build_redaction_boxes(
+            valid_repeat_matches,
+            fragments_by_id,
+            fields_by_id,
+        )
+        text_redaction_boxes.extend(repeat_redaction_boxes)
+        redaction_boxes = list(text_redaction_boxes)
+
+        face_boxes = []
+        face_error = None
+        if face_detect.is_enabled(config):
+            try:
+                face_boxes = face_detect.detect_faces(image_path, config)
+                redaction_boxes.extend(face_boxes)
+            except Exception as error:
+                face_error = {
+                    "error": str(error),
+                    "error_type": type(error).__name__,
+                }
+
+        if debug_enabled:
+            associate_fields.save_match_overlay(image_path, match_overlay_path, redaction_boxes)
+
+        valid_boxes, rejected_boxes = redact_from_matches.validate_redaction_boxes(
+            redaction_boxes,
+            width,
+            height,
+        )
+        redact_from_matches.redact_image(image_path, redacted_path, valid_boxes)
+
+        manifest.update(
+            {
+                "status": "completed",
+                "association": {
+                    "field_results": field_results,
+                    "valid_matches": valid_matches,
+                    "rejected_matches": rejected_matches,
+                    "redaction_boxes": text_redaction_boxes,
+                    "valid_match_count": len(valid_matches),
+                    "rejected_match_count": len(rejected_matches),
+                    "redaction_box_count": len(text_redaction_boxes),
+                },
+                "repeat_detection": {
+                    **repeat_result,
+                    "valid_matches": valid_repeat_matches,
+                    "rejected_matches": rejected_repeat_matches,
+                    "redaction_boxes": repeat_redaction_boxes,
+                    "valid_match_count": len(valid_repeat_matches),
+                    "rejected_match_count": len(rejected_repeat_matches),
+                    "redaction_box_count": len(repeat_redaction_boxes),
+                },
+                "face_detection": {
+                    "enabled": face_detect.is_enabled(config),
+                    "status": "error" if face_error else "completed",
+                    "detections": face_boxes,
+                    "detection_count": len(face_boxes),
+                    "error": face_error,
+                },
+                "redaction": {
+                    "status": "completed",
+                    "image_size": {"width": width, "height": height},
+                    "valid_boxes": valid_boxes,
+                    "rejected_boxes": rejected_boxes,
+                    "valid_box_count": len(valid_boxes),
+                    "rejected_box_count": len(rejected_boxes),
+                },
+            }
+        )
+    except Exception as error:
+        manifest.update(
+            {
+                "status": "error",
                 "error": str(error),
                 "error_type": type(error).__name__,
             }
+        )
+        redact_from_matches.save_json(manifest_path, manifest)
+        raise
 
-    associate_fields.save_match_overlay(image_path, match_overlay_path, redaction_boxes)
-
-    match_manifest = {
-        "image": str(image_path),
-        "ocr_log": str(ocr_log_path),
-        "ocr_source_image": ocr_manifest.get("image"),
-        "config": str(config_path),
-        "document_definition": str(document_definition_path),
-        "document_type": document_definition.get("id"),
-        "routing": routing_result,
-        "model": config.get("vlm", {}).get("model"),
-        "created_at": datetime.now().isoformat(timespec="seconds"),
-        "match_overlay": str(match_overlay_path),
-        "status": "completed",
-        "field_results": field_results,
-        "valid_matches": valid_matches,
-        "rejected_matches": rejected_matches,
-        "repeat_detection": {
-            **repeat_result,
-            "valid_matches": valid_repeat_matches,
-            "rejected_matches": rejected_repeat_matches,
-            "redaction_boxes": repeat_redaction_boxes,
-            "valid_match_count": len(valid_repeat_matches),
-            "rejected_match_count": len(rejected_repeat_matches),
-            "redaction_box_count": len(repeat_redaction_boxes),
-        },
-        "redaction_boxes": redaction_boxes,
-        "face_detection": {
-            "enabled": face_detect.is_enabled(config),
-            "status": "error" if face_error else "completed",
-            "detections": face_boxes,
-            "detection_count": len(face_boxes),
-            "error": face_error,
-        },
-        "valid_match_count": len(valid_matches),
-        "rejected_match_count": len(rejected_matches),
-        "redaction_box_count": len(redaction_boxes),
-    }
-    associate_fields.save_json(match_log_path, match_manifest)
-
-    redacted_path, redaction_log_path = redact_from_matches.make_run_paths(config, image_path)
-    valid_boxes, rejected_boxes = redact_from_matches.validate_redaction_boxes(
-        redaction_boxes,
-        width,
-        height,
-    )
-    redact_from_matches.redact_image(image_path, redacted_path, valid_boxes)
-
-    redaction_manifest = {
-        "image": str(image_path),
-        "matches_log": str(match_log_path),
-        "config": str(config_path),
-        "output": str(redacted_path),
-        "created_at": datetime.now().isoformat(timespec="seconds"),
-        "status": "completed",
-        "image_size": {"width": width, "height": height},
-        "valid_boxes": valid_boxes,
-        "rejected_boxes": rejected_boxes,
-        "valid_box_count": len(valid_boxes),
-        "rejected_box_count": len(rejected_boxes),
-    }
-    redact_from_matches.save_json(redaction_log_path, redaction_manifest)
+    redact_from_matches.save_json(manifest_path, manifest)
 
     return {
-        "ocr_log": ocr_log_path,
-        "ocr_debug_overlay": ocr_debug_path,
-        "match_log": match_log_path,
-        "match_overlay": match_overlay_path,
-        "redaction_log": redaction_log_path,
+        "ocr_debug_overlay": ocr_debug_path if debug_enabled else None,
+        "match_overlay": match_overlay_path if debug_enabled else None,
+        "manifest": manifest_path,
         "redacted_image": redacted_path,
     }
 
@@ -193,26 +243,20 @@ def main():
         default="document_definitions",
         help="Folder containing routable document definition YAML files.",
     )
-    parser.add_argument(
-        "--include-text",
-        action="store_true",
-        help="Include OCR text in the OCR log. Required for association during this POC.",
-    )
     args = parser.parse_args()
 
     outputs = run_pipeline(
         args.image,
         args.config,
         args.document_definition,
-        args.include_text,
         args.document_definitions_dir,
     )
 
-    print(f"Saved OCR log: {outputs['ocr_log']}")
-    print(f"Saved OCR debug overlay: {outputs['ocr_debug_overlay']}")
-    print(f"Saved field match log: {outputs['match_log']}")
-    print(f"Saved field match overlay: {outputs['match_overlay']}")
-    print(f"Saved redaction log: {outputs['redaction_log']}")
+    print(f"Saved manifest: {outputs['manifest']}")
+    if outputs["ocr_debug_overlay"]:
+        print(f"Saved OCR debug overlay: {outputs['ocr_debug_overlay']}")
+    if outputs["match_overlay"]:
+        print(f"Saved field match overlay: {outputs['match_overlay']}")
     print(f"Saved redacted image: {outputs['redacted_image']}")
 
 

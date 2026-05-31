@@ -22,6 +22,16 @@ def get_confidence_threshold(config):
         return DEFAULT_CONFIDENCE_THRESHOLD
 
 
+def is_debug_enabled(config):
+    debug = config.get("debug") or {}
+    return bool(debug.get("enabled", False)) if isinstance(debug, dict) else False
+
+
+def add_raw_response_if_debug(target, config, raw_response):
+    if is_debug_enabled(config):
+        target["raw_response"] = raw_response
+
+
 def iter_routable_definition_paths(definitions_dir):
     definitions_dir = Path(definitions_dir)
     for path in sorted(definitions_dir.rglob("*.yaml")):
@@ -177,9 +187,9 @@ def route_document_with_llm(config, ocr_manifest, definitions_dir):
                 "status": "llm_response_error",
                 "error": "LLM routing response was not valid JSON in the expected shape.",
                 "error_details": str(error),
-                "raw_response": raw_response,
             }
         )
+        add_raw_response_if_debug(result, config, raw_response)
         return None, result
 
     known_paths = {candidate["document_definition"] for candidate in candidates}
@@ -190,9 +200,9 @@ def route_document_with_llm(config, ocr_manifest, definitions_dir):
                 "status": "llm_response_error",
                 "error": "LLM selected an unknown document definition.",
                 "selected_document_definition": selected_path,
-                "raw_response": raw_response,
             }
         )
+        add_raw_response_if_debug(result, config, raw_response)
         return None, result
 
     confidence = parsed.get("confidence")
@@ -207,7 +217,7 @@ def route_document_with_llm(config, ocr_manifest, definitions_dir):
             "selected_document_type": parsed.get("document_type", ""),
             "selected_document_definition": selected_path,
             "confidence": confidence_value,
-            "reason": parsed.get("reason", ""),
+            "reason": parsed.get("reason", "") if is_debug_enabled(config) else "",
         }
     )
 

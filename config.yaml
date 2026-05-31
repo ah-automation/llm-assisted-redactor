@@ -8,6 +8,10 @@ vlm:
 output_dir: "output"
 logs_dir: "logs"
 
+debug:
+  enabled: false
+  warning: "WARNING: When enabled, OCR text, raw model responses, and debug overlays may contain PII and will be saved locally."
+
 routing:
   confidence_threshold: 0.75
 

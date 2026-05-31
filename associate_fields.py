@@ -3,6 +3,7 @@ import json
 import math
 from datetime import datetime
 from pathlib import Path
+from uuid import uuid4
 
 import yaml
 from openai import OpenAI
@@ -112,8 +113,19 @@ def save_json(path, data):
         json.dump(data, file, indent=2)
 
 
+def is_debug_enabled(config):
+    debug = config.get("debug") or {}
+    return bool(debug.get("enabled", False)) if isinstance(debug, dict) else False
+
+
+def add_raw_response_if_debug(target, config, raw_response):
+    if is_debug_enabled(config):
+        target["raw_response"] = raw_response
+
+
 def make_run_paths(config, image_path):
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    unique_suffix = uuid4().hex[:8]
     image_stem = image_path.stem
 
     output_dir = Path(config.get("output_dir", "output"))
@@ -121,8 +133,8 @@ def make_run_paths(config, image_path):
     output_dir.mkdir(parents=True, exist_ok=True)
     logs_dir.mkdir(parents=True, exist_ok=True)
 
-    overlay_path = output_dir / f"{image_stem}-field-matches-{timestamp}.png"
-    log_path = logs_dir / f"{image_stem}-field-matches-{timestamp}.json"
+    overlay_path = output_dir / f"{timestamp}-{unique_suffix}-{image_stem}-field-matches.png"
+    log_path = logs_dir / f"{timestamp}-{unique_suffix}-{image_stem}-field-matches.json"
     return overlay_path, log_path
 
 
@@ -429,9 +441,9 @@ def find_repeat_matches(config, document_definition, ocr_manifest, valid_matches
                 "status": "llm_response_error",
                 "error": "LLM response was not valid JSON in the expected shape.",
                 "error_details": str(error),
-                "raw_response": raw_response,
             }
         )
+        add_raw_response_if_debug(result, config, raw_response)
         return [], result
 
 
@@ -468,9 +480,9 @@ def associate_fields(config, document_definition, ocr_manifest):
                     "status": "llm_response_error",
                     "error": "LLM response was not valid JSON in the expected shape.",
                     "error_details": str(error),
-                    "raw_response": raw_response,
                 }
             )
+            add_raw_response_if_debug(field_result, config, raw_response)
 
         field_results.append(field_result)
 
@@ -547,7 +559,14 @@ def limit_value_fragments(value_ids, anchor_ids, field, fragments_by_id):
     return sorted(value_ids, key=sort_key)[:max_value_fragments]
 
 
-def validate_matches(matches, fields_by_id, fragments_by_id, document_definition, disallowed_value_ids=None):
+def validate_matches(
+    matches,
+    fields_by_id,
+    fragments_by_id,
+    document_definition,
+    disallowed_value_ids=None,
+    include_notes=False,
+):
     valid_matches = []
     rejected_matches = []
     fragment_ids = set(fragments_by_id)
@@ -629,7 +648,7 @@ def validate_matches(matches, fields_by_id, fragments_by_id, document_definition
                 "value_fragment_ids": value_ids,
                 "anchor_fragment_ids": anchor_ids,
                 "confidence": confidence,
-                "notes": str(match.get("notes", ""))[:160],
+                "notes": str(match.get("notes", ""))[:160] if include_notes else "",
             }
         )
 
@@ -720,7 +739,7 @@ def save_match_overlay(image_path, overlay_path, redaction_boxes):
 def main():
     parser = argparse.ArgumentParser(description="Associate OCR fragments with document fields using a local LLM.")
     parser.add_argument("--image", required=True, help="Path to the source image.")
-    parser.add_argument("--ocr-log", required=True, help="Path to an OCR JSON log created with --include-text.")
+    parser.add_argument("--ocr-log", required=True, help="Path to an OCR JSON log created while debug.enabled is true.")
     parser.add_argument("--config", default="config.yaml", help="Path to config.yaml.")
     parser.add_argument("--document-definition", required=True, help="Path to a document definition YAML file.")
     args = parser.parse_args()
@@ -731,6 +750,7 @@ def main():
     document_definition_path = Path(args.document_definition)
 
     config = load_yaml(config_path)
+    debug_enabled = is_debug_enabled(config)
     ocr_manifest = load_json(ocr_log_path)
     document_definition = load_document_definition(document_definition_path)
     overlay_path, log_path = make_run_paths(config, image_path)
@@ -744,7 +764,8 @@ def main():
         "document_type": document_definition.get("id"),
         "model": config.get("vlm", {}).get("model"),
         "created_at": datetime.now().isoformat(timespec="seconds"),
-        "match_overlay": str(overlay_path),
+        "debug": {"enabled": debug_enabled},
+        "match_overlay": str(overlay_path) if debug_enabled else None,
         "status": "started",
     }
 
@@ -755,7 +776,13 @@ def main():
         fields_by_id = {field.get("id"): field for field in iter_fields(document_definition)}
         fragments = ocr_manifest.get("fragments", [])
         fragments_by_id = {fragment["id"]: fragment for fragment in fragments}
-        valid_matches, rejected_matches = validate_matches(matches, fields_by_id, fragments_by_id, document_definition)
+        valid_matches, rejected_matches = validate_matches(
+            matches,
+            fields_by_id,
+            fragments_by_id,
+            document_definition,
+            include_notes=debug_enabled,
+        )
         repeat_matches, repeat_result = find_repeat_matches(
             config,
             document_definition,
@@ -769,6 +796,7 @@ def main():
             fields_by_id,
             fragments_by_id,
             document_definition,
+            include_notes=debug_enabled,
             disallowed_value_ids={
                 fragment_id
                 for match in valid_matches
@@ -778,7 +806,8 @@ def main():
         redaction_boxes = build_redaction_boxes(valid_matches, fragments_by_id, fields_by_id)
         repeat_redaction_boxes = build_redaction_boxes(valid_repeat_matches, fragments_by_id, fields_by_id)
         redaction_boxes.extend(repeat_redaction_boxes)
-        save_match_overlay(image_path, overlay_path, redaction_boxes)
+        if debug_enabled:
+            save_match_overlay(image_path, overlay_path, redaction_boxes)
 
         manifest.update(
             {
@@ -800,7 +829,8 @@ def main():
                 "redaction_box_count": len(redaction_boxes),
             }
         )
-        print(f"Saved field match overlay: {overlay_path}")
+        if debug_enabled:
+            print(f"Saved field match overlay: {overlay_path}")
         print(f"Saved field match log: {log_path}")
     except Exception as error:
         manifest.update(
