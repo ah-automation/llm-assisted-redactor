@@ -1,7 +1,7 @@
 from pathlib import Path
 import json
 
-import associate_fields
+from redactor import associate_fields
 from openai import OpenAI
 
 

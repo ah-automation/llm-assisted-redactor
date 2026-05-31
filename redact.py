@@ -3,11 +3,11 @@ from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
 
-import associate_fields
-import document_router
-import face_detect
-import ocr_image
-import redact_from_matches
+from redactor import associate_fields
+from redactor import document_router
+from redactor import face_detect
+from redactor import ocr_image
+from redactor import redact_from_matches
 
 
 def make_run_paths(config, image_path):
@@ -29,7 +29,7 @@ def make_run_paths(config, image_path):
     }
 
 
-def run_pipeline(image_path, config_path, document_definition_path, document_definitions_dir):
+def redact_image_file(image_path, config_path, document_definition_path, document_definitions_dir):
     image_path = Path(image_path)
     config_path = Path(config_path)
     document_definition_path = Path(document_definition_path) if document_definition_path else None
@@ -245,7 +245,7 @@ def main():
     )
     args = parser.parse_args()
 
-    outputs = run_pipeline(
+    outputs = redact_image_file(
         args.image,
         args.config,
         args.document_definition,
