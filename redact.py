@@ -1,6 +1,12 @@
 import argparse
+from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime
+import io
+import json
+import logging
 from pathlib import Path
+import sys
+import traceback
 from uuid import uuid4
 
 from redactor import associate_fields
@@ -8,6 +14,16 @@ from redactor import document_router
 from redactor import face_detect
 from redactor import ocr_image
 from redactor import redact_from_matches
+
+
+REVIEW_STATUSES = {"unsupported_document", "ambiguous_document", "low_confidence", "needs_review"}
+
+
+class RedactionRunError(Exception):
+    def __init__(self, manifest, original_error):
+        super().__init__(str(original_error))
+        self.manifest = manifest
+        self.original_error = original_error
 
 
 def make_run_paths(config, image_path):
@@ -100,6 +116,7 @@ def redact_image_file(image_path, config_path, document_definition_path, documen
             )
             manifest["routing"] = routing_result
             if document_definition_path is None:
+                manifest["status"] = routing_result.get("status", "routing_failed")
                 raise ValueError(
                     f"Document routing failed: {routing_result['status']} - {routing_result.get('reason', '')}"
                 )
@@ -210,15 +227,17 @@ def redact_image_file(image_path, config_path, document_definition_path, documen
             }
         )
     except Exception as error:
+        status = manifest.get("status")
+        if status in {"started", "completed"}:
+            manifest["status"] = "error"
         manifest.update(
             {
-                "status": "error",
                 "error": str(error),
                 "error_type": type(error).__name__,
             }
         )
         redact_from_matches.save_json(manifest_path, manifest)
-        raise
+        raise RedactionRunError(manifest, error) from error
 
     redact_from_matches.save_json(manifest_path, manifest)
 
@@ -228,6 +247,50 @@ def redact_image_file(image_path, config_path, document_definition_path, documen
         "manifest": manifest_path,
         "redacted_image": redacted_path,
     }
+
+
+def build_summary(manifest):
+    redaction = manifest.get("redaction") or {}
+    routing = manifest.get("routing") or {}
+    return {
+        "status": manifest.get("status", "error"),
+        "manifest": (manifest.get("artifacts") or {}).get("manifest"),
+        "output": manifest.get("output"),
+        "document_type": manifest.get("document_type"),
+        "document_definition": manifest.get("document_definition"),
+        "routing_status": routing.get("status"),
+        "redaction_box_count": redaction.get("valid_box_count", 0),
+        "rejected_box_count": redaction.get("rejected_box_count", 0),
+        "error": manifest.get("error"),
+        "error_type": manifest.get("error_type"),
+    }
+
+
+def exit_code_for_status(status):
+    if status == "completed":
+        return 0
+    if status in REVIEW_STATUSES:
+        return 2
+    return 1
+
+
+def print_verbose_summary(summary):
+    print(f"Status: {summary['status']}")
+    if summary.get("document_type"):
+        print(f"Document type: {summary['document_type']}")
+    if summary.get("routing_status"):
+        print(f"Routing status: {summary['routing_status']}")
+    if summary.get("manifest"):
+        print(f"Saved manifest: {summary['manifest']}")
+    if summary.get("output"):
+        if summary["status"] == "completed":
+            print(f"Saved redacted image: {summary['output']}")
+        else:
+            print(f"Output path: {summary['output']}")
+    if summary.get("redaction_box_count") is not None:
+        print(f"Redaction boxes: {summary['redaction_box_count']}")
+    if summary.get("error"):
+        print(f"Error: {summary['error']}")
 
 
 def main():
@@ -243,22 +306,69 @@ def main():
         default="document_definitions",
         help="Folder containing routable document definition YAML files.",
     )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Print human-readable status messages instead of a compact JSON summary.",
+    )
     args = parser.parse_args()
 
-    outputs = redact_image_file(
-        args.image,
-        args.config,
-        args.document_definition,
-        args.document_definitions_dir,
-    )
+    manifest = None
+    original_error = None
+    captured_output = io.StringIO()
+    if not args.verbose:
+        logging.disable(logging.CRITICAL)
 
-    print(f"Saved manifest: {outputs['manifest']}")
-    if outputs["ocr_debug_overlay"]:
-        print(f"Saved OCR debug overlay: {outputs['ocr_debug_overlay']}")
-    if outputs["match_overlay"]:
-        print(f"Saved field match overlay: {outputs['match_overlay']}")
-    print(f"Saved redacted image: {outputs['redacted_image']}")
+    try:
+        if args.verbose:
+            outputs = redact_image_file(
+                args.image,
+                args.config,
+                args.document_definition,
+                args.document_definitions_dir,
+            )
+        else:
+            with redirect_stdout(captured_output), redirect_stderr(captured_output):
+                outputs = redact_image_file(
+                    args.image,
+                    args.config,
+                    args.document_definition,
+                    args.document_definitions_dir,
+                )
+        manifest = redact_from_matches.load_json(outputs["manifest"])
+    except RedactionRunError as error:
+        manifest = error.manifest
+        original_error = error.original_error
+    except Exception as error:
+        original_error = error
+        manifest = {
+            "status": "error",
+            "error": str(error),
+            "error_type": type(error).__name__,
+        }
+    finally:
+        if not args.verbose:
+            logging.disable(logging.NOTSET)
+
+    summary = build_summary(manifest)
+    if args.verbose:
+        print_verbose_summary(summary)
+        if original_error:
+            print("Traceback:", file=sys.stderr)
+            traceback.print_exception(
+                type(original_error),
+                original_error,
+                original_error.__traceback__,
+                file=sys.stderr,
+            )
+    else:
+        print(json.dumps(summary, separators=(",", ":")))
+
+    exit_code = exit_code_for_status(summary["status"])
+    if original_error and args.verbose:
+        print(f"Exit code: {exit_code}")
+    return exit_code
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
