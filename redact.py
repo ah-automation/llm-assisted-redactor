@@ -17,6 +17,11 @@ from redactor import redact_from_matches
 
 
 REVIEW_STATUSES = {"unsupported_document", "ambiguous_document", "low_confidence", "needs_review"}
+OUT_OF_SCOPE_EXTENSIONS = {
+    ".pdf": "PDF input is out of scope for this image-only POC.",
+    ".heic": "HEIC/HEIF input is not supported by the current local image stack.",
+    ".heif": "HEIC/HEIF input is not supported by the current local image stack.",
+}
 
 
 class RedactionRunError(Exception):
@@ -24,6 +29,19 @@ class RedactionRunError(Exception):
         super().__init__(str(original_error))
         self.manifest = manifest
         self.original_error = original_error
+
+
+class UnsupportedInputFormatError(ValueError):
+    pass
+
+
+def validate_input_format(image_path):
+    suffix = image_path.suffix.lower()
+    if suffix in OUT_OF_SCOPE_EXTENSIONS:
+        raise UnsupportedInputFormatError(
+            f"Unsupported input format '{suffix}'. {OUT_OF_SCOPE_EXTENSIONS[suffix]} "
+            "Use a supported image format such as .jpg, .jpeg, .png, .webp, .avif, .bmp, .tif, or .tiff."
+        )
 
 
 def make_run_paths(config, image_path):
@@ -77,6 +95,7 @@ def redact_image_file(image_path, config_path, document_definition_path, documen
     }
 
     try:
+        validate_input_format(image_path)
         ocr_fragments = ocr_image.run_ocr(image_path)
         if debug_enabled:
             ocr_image.save_debug_overlay(image_path, ocr_debug_path, ocr_fragments)
@@ -229,7 +248,10 @@ def redact_image_file(image_path, config_path, document_definition_path, documen
     except Exception as error:
         status = manifest.get("status")
         if status in {"started", "completed"}:
-            manifest["status"] = "error"
+            if isinstance(error, UnsupportedInputFormatError):
+                manifest["status"] = "unsupported_format"
+            else:
+                manifest["status"] = "error"
         manifest.update(
             {
                 "error": str(error),
