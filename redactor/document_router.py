@@ -32,6 +32,10 @@ def add_raw_response_if_debug(target, config, raw_response):
         target["raw_response"] = raw_response
 
 
+def get_llm_config(config):
+    return config["llm"]
+
+
 def iter_routable_definition_paths(definitions_dir):
     definitions_dir = Path(definitions_dir)
     for path in sorted(definitions_dir.rglob("*.yaml")):
@@ -103,16 +107,16 @@ def get_llm_route_response_format():
 
 
 def call_llm_router(config, prompt):
-    vlm_config = config["vlm"]
+    llm_config = get_llm_config(config)
     client = OpenAI(
-        base_url=vlm_config["base_url"],
-        api_key=vlm_config.get("api_key", "lm-studio"),
+        base_url=llm_config["base_url"],
+        api_key=llm_config.get("api_key", "lm-studio"),
     )
 
     response = client.chat.completions.create(
-        model=vlm_config["model"],
-        temperature=vlm_config.get("temperature", 0),
-        max_tokens=vlm_config.get("max_tokens", 1000),
+        model=llm_config["model"],
+        temperature=llm_config.get("temperature", 0),
+        max_tokens=llm_config.get("max_tokens", 1000),
         response_format=get_llm_route_response_format(),
         messages=[
             {

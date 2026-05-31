@@ -44,6 +44,10 @@ def validate_input_format(image_path):
         )
 
 
+def get_llm_config(config):
+    return config["llm"]
+
+
 def make_run_paths(config, image_path):
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     unique_suffix = uuid4().hex[:8]
@@ -82,7 +86,7 @@ def redact_image_file(image_path, config_path, document_definition_path, documen
         "image": str(image_path),
         "config": str(config_path),
         "output": str(redacted_path),
-        "model": config.get("vlm", {}).get("model"),
+        "model": get_llm_config(config).get("model"),
         "created_at": datetime.now().isoformat(timespec="seconds"),
         "debug": ocr_image.debug_manifest(config),
         "status": "started",

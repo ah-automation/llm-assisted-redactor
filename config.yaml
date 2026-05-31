@@ -1,4 +1,4 @@
-vlm:
+llm:
   base_url: "http://localhost:1234/v1"
   api_key: "lm-studio"
   model: "google/gemma-4-26b-a4b"

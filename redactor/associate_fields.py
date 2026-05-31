@@ -123,6 +123,10 @@ def add_raw_response_if_debug(target, config, raw_response):
         target["raw_response"] = raw_response
 
 
+def get_llm_config(config):
+    return config["llm"]
+
+
 def make_run_paths(config, image_path):
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     unique_suffix = uuid4().hex[:8]
@@ -231,16 +235,16 @@ def build_repeat_detection_prompt(document_definition, known_fields, remaining_f
 
 
 def call_llm(config, prompt):
-    vlm_config = config["vlm"]
+    llm_config = get_llm_config(config)
     client = OpenAI(
-        base_url=vlm_config["base_url"],
-        api_key=vlm_config.get("api_key", "lm-studio"),
+        base_url=llm_config["base_url"],
+        api_key=llm_config.get("api_key", "lm-studio"),
     )
 
     response = client.chat.completions.create(
-        model=vlm_config["model"],
-        temperature=vlm_config.get("temperature", 0),
-        max_tokens=vlm_config.get("max_tokens", 1000),
+        model=llm_config["model"],
+        temperature=llm_config.get("temperature", 0),
+        max_tokens=llm_config.get("max_tokens", 1000),
         response_format=get_match_response_format(),
         messages=[
             {
@@ -762,7 +766,7 @@ def main():
         "config": str(config_path),
         "document_definition": str(document_definition_path),
         "document_type": document_definition.get("id"),
-        "model": config.get("vlm", {}).get("model"),
+        "model": get_llm_config(config).get("model"),
         "created_at": datetime.now().isoformat(timespec="seconds"),
         "debug": {"enabled": debug_enabled},
         "match_overlay": str(overlay_path) if debug_enabled else None,
