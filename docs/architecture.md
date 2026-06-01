@@ -120,4 +120,4 @@ Unsupported input formats such as PDF and HEIC/HEIF fail before OCR starts and r
 
 ## Current Scope
 
-The pipeline is designed for short scanned/image documents where OCR can extract the relevant text. It is not designed for long PDFs, large multi-page records, or compliance-grade unattended redaction.
+The pipeline is designed for short Latin-script scanned/image documents where OCR can extract the relevant text. It is not designed for long PDFs, large multi-page records, or compliance-grade unattended redaction.

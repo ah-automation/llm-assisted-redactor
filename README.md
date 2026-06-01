@@ -154,6 +154,7 @@ Normal manifests avoid storing OCR text and raw LLM responses. Debug mode is use
 
 - Image-only input; no PDF support.
 - OCR quality strongly affects results.
+- The current version is intended for Latin-script documents.
 - Handwriting is not a primary target.
 - Very dense documents can exceed local model context limits.
 - Barcodes and QR codes are not detected or redacted.
