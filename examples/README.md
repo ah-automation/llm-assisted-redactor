@@ -36,6 +36,10 @@ Default stdout is a compact JSON object:
   "document_type": "passport.common",
   "document_definition": "document_definitions\\passports\\common.yaml",
   "routing_status": "completed",
+  "review_status": "passed",
+  "missing_review_fields": [],
+  "missing_review_groups": [],
+  "partial_output_written": false,
   "redaction_box_count": 12,
   "rejected_box_count": 0,
   "error": null,
@@ -66,6 +70,12 @@ Normal manifests should not include OCR text or raw model responses when `debug.
   "redaction": {
     "valid_box_count": 12,
     "rejected_box_count": 0
+  },
+  "review": {
+    "status": "passed",
+    "missing_fields": [],
+    "missing_groups": [],
+    "partial_output_written": false
   }
 }
 ```

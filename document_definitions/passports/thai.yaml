@@ -72,7 +72,6 @@ fields:
   passport_number_cover:
     label: "Passport number on endorsement page"
     type: "text"
-    required: false
     description: "Duplicate passport number printed vertically on the adjacent endorsement page."
     anchors:
       - "Passport No"
@@ -86,7 +85,6 @@ fields:
   identification_number:
     label: "Identification number"
     type: "text"
-    required: false
     description: "National identification number printed on the passport."
     anchors:
       - "Identification No"

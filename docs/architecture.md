@@ -90,7 +90,7 @@ output/YYYYMMDD-HHMMSS-uniqueid-image_name-redacted.png
 Default stdout is compact JSON:
 
 ```json
-{"status":"completed","manifest":"logs\\...","output":"output\\...","document_type":"passport.common"}
+{"status":"completed","manifest":"logs\\...","output":"output\\...","document_type":"passport.common","review_status":"passed"}
 ```
 
 Use `--verbose` for human-readable output, library logs, and tracebacks during setup or troubleshooting.
@@ -115,6 +115,8 @@ The script returns:
 - exit code `0` for completed runs
 - exit code `1` for errors
 - exit code `2` for unsupported document, ambiguous document, low-confidence route, or review-needed statuses
+
+If a document definition's review policy is not satisfied, the manifest status is `needs_review`. In normal mode, the redacted image is not written; in debug mode, a partial redacted image may be written for troubleshooting.
 
 Unsupported input formats such as PDF and HEIC/HEIF fail before OCR starts and return exit code `1`.
 

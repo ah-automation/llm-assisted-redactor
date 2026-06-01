@@ -187,7 +187,6 @@ def build_field_association_prompt(document_definition, field, ocr_manifest):
             "id": field.get("id"),
             "label": field.get("label"),
             "type": field.get("type"),
-            "required": field.get("required", False),
             "description": field.get("description"),
             "anchors": field.get("anchors", []),
             "match_hints": field.get("match_hints", []),

@@ -48,6 +48,18 @@ repeat_detection:
     - "rx_id"
     - "date_of_birth"
 
+review:
+  required_fields:
+    - "member_id"
+  required_groups:
+    - id: "primary_member_name"
+      label: "Member name"
+      any_of:
+        - "member_name"
+      all_of:
+        - "surname"
+        - "given_names"
+
 fragment_tags:
   insurer_contact:
     label: "Insurer contact information"
@@ -68,7 +80,6 @@ fields:
   member_name:
     label: "Member name"
     type: "text"
-    required: true
     max_value_fragments: 3
     description: "The primary member, subscriber, cardholder, employee, or insured person's name when shown as one combined field."
     anchors:
@@ -89,7 +100,6 @@ fields:
   surname:
     label: "Surname or last name"
     type: "text"
-    required: false
     max_value_fragments: 2
     description: "The member, subscriber, cardholder, employee, or insured person's surname or last name when shown separately."
     anchors:
@@ -103,7 +113,6 @@ fields:
   given_names:
     label: "Given names or first name"
     type: "text"
-    required: false
     max_value_fragments: 3
     description: "The member, subscriber, cardholder, employee, or insured person's given names or first name when shown separately."
     anchors:
@@ -119,7 +128,6 @@ fields:
   dependent_names:
     label: "Dependent names"
     type: "text"
-    required: false
     max_value_fragments: 8
     description: "Names of dependents, spouse, children, covered family members, or listed participants."
     anchors:
@@ -137,7 +145,6 @@ fields:
   member_id:
     label: "Member ID"
     type: "document_metadata"
-    required: true
     max_value_fragments: 3
     description: "The member, card, participant, benefits, or health insurance identifier."
     anchors:
@@ -157,7 +164,6 @@ fields:
   subscriber_id:
     label: "Subscriber ID"
     type: "document_metadata"
-    required: false
     max_value_fragments: 3
     description: "The subscriber, employee, or primary insured identifier."
     anchors:
@@ -174,7 +180,6 @@ fields:
   policy_number:
     label: "Policy number"
     type: "document_metadata"
-    required: false
     max_value_fragments: 3
     description: "The policy number or policy identifier."
     anchors:
@@ -188,7 +193,6 @@ fields:
   group_number:
     label: "Group number"
     type: "document_metadata"
-    required: false
     max_value_fragments: 3
     description: "The group number, group ID, employer group, or benefits group identifier."
     anchors:
@@ -205,7 +209,6 @@ fields:
   certificate_number:
     label: "Certificate number"
     type: "document_metadata"
-    required: false
     max_value_fragments: 3
     description: "The certificate, coverage, or benefits certificate number."
     anchors:
@@ -221,7 +224,6 @@ fields:
   plan_number:
     label: "Plan number"
     type: "document_metadata"
-    required: false
     max_value_fragments: 3
     description: "A plan number, plan ID, class, division, or package identifier."
     anchors:
@@ -238,7 +240,6 @@ fields:
   contract_number:
     label: "Contract number"
     type: "document_metadata"
-    required: false
     max_value_fragments: 3
     description: "A contract, client, carrier, or account identifier associated with the health insurance plan."
     anchors:
@@ -255,7 +256,6 @@ fields:
   rx_bin:
     label: "Rx BIN"
     type: "document_metadata"
-    required: false
     description: "The pharmacy benefit BIN identifier."
     anchors:
       - "BIN"
@@ -268,7 +268,6 @@ fields:
   rx_pcn:
     label: "Rx PCN"
     type: "document_metadata"
-    required: false
     description: "The pharmacy benefit PCN identifier."
     anchors:
       - "PCN"
@@ -281,7 +280,6 @@ fields:
   rx_group:
     label: "Rx group"
     type: "document_metadata"
-    required: false
     description: "The pharmacy benefit Rx group identifier."
     anchors:
       - "Rx Group"
@@ -294,7 +292,6 @@ fields:
   rx_id:
     label: "Rx ID"
     type: "document_metadata"
-    required: false
     max_value_fragments: 3
     description: "The prescription benefit member or pharmacy ID."
     anchors:
@@ -308,7 +305,6 @@ fields:
   date_of_birth:
     label: "Date of birth"
     type: "text"
-    required: false
     description: "The member or dependent date of birth."
     anchors:
       - "Date of birth"
@@ -321,7 +317,6 @@ fields:
   sex:
     label: "Sex"
     type: "text"
-    required: false
     description: "The member or dependent sex or gender marker."
     anchors:
       - "Sex"

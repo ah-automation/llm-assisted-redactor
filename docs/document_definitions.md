@@ -79,7 +79,6 @@ fields:
   date_of_birth:
     label: "Date of birth"
     type: "text"
-    required: true
     description: "The holder's date of birth."
     anchors:
       - "Date of birth"
@@ -92,12 +91,36 @@ Important properties:
 
 - `label`: human-readable field name
 - `type`: simple category such as `text` or `mrz`
-- `required`: whether the field is expected for this definition
 - `description`: conceptual explanation for the LLM
 - `anchors`: labels or headings associated with the field
 - `match_hints`: extra guidance for difficult fields
 - `max_value_fragments`: number of OCR fragments the LLM may choose
 - `redaction.mode`: currently `ocr_box`
+
+## Review Policy
+
+The optional `review` section describes which redactions must succeed before a run can be considered complete.
+
+```yaml
+review:
+  required_fields:
+    - "license_number"
+    - "date_of_birth"
+  required_groups:
+    - id: "holder_name"
+      label: "Cardholder name"
+      any_of:
+        - "name_full"
+      all_of:
+        - "surname"
+        - "given_names"
+```
+
+`required_fields` are individual fields that must produce at least one valid redaction box.
+
+`required_groups` handle either/or requirements. The example above passes if `name_full` is redacted, or if both `surname` and `given_names` are redacted.
+
+If a review requirement is not met, the run returns `needs_review` with exit code `2`. In normal mode, no redacted image is written for that run. In debug mode, a partial redacted image may be written for troubleshooting.
 
 ## Field Overrides
 

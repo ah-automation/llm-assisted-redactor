@@ -39,6 +39,10 @@ repeat_detection:
     - "institution_number"
     - "micr_line"
 
+review:
+  required_fields:
+    - "bank_account_number"
+
 fragment_tags:
   field_label:
     label: "Printed field label"
@@ -63,7 +67,6 @@ fields:
   account_holder_name:
     label: "Account holder name"
     type: "text"
-    required: false
     max_value_fragments: 3
     description: "The printed personal or business name of the cheque account holder. Do not choose the bank name."
     anchors:
@@ -79,7 +82,6 @@ fields:
   account_holder_address:
     label: "Account holder address"
     type: "text"
-    required: false
     max_value_fragments: 4
     description: "The printed mailing or business address of the cheque account holder. Do not choose the bank branch address."
     anchors:
@@ -95,7 +97,6 @@ fields:
   account_holder_phone:
     label: "Account holder phone number"
     type: "text"
-    required: false
     description: "The account holder's printed phone or contact number. Do not choose bank, branch, customer service, or security feature phone numbers."
     anchors:
       - "Phone"
@@ -112,7 +113,6 @@ fields:
   payee_name:
     label: "Payee name"
     type: "text"
-    required: false
     max_value_fragments: 3
     description: "The readable payee or recipient value on the 'Pay to the order of' line. Do not choose account holder, payer, drawer, bank, or address details."
     anchors:
@@ -132,7 +132,6 @@ fields:
   cheque_number:
     label: "Cheque number"
     type: "document_metadata"
-    required: false
     description: "The cheque or check number, often printed near the top right and repeated in the MICR line."
     anchors:
       - "Cheque number"
@@ -146,7 +145,6 @@ fields:
   bank_account_number:
     label: "Bank account number"
     type: "financial_identifier"
-    required: true
     max_value_fragments: 3
     description: "The bank account number printed on the cheque or embedded in the MICR line."
     anchors:
@@ -161,7 +159,6 @@ fields:
   routing_number:
     label: "Routing number"
     type: "financial_identifier"
-    required: false
     max_value_fragments: 2
     description: "A US-style routing number printed on the cheque or embedded in the MICR line."
     anchors:
@@ -176,7 +173,6 @@ fields:
   transit_number:
     label: "Transit number"
     type: "financial_identifier"
-    required: false
     max_value_fragments: 2
     description: "A Canadian-style transit or branch number printed on the cheque or embedded in the MICR line."
     anchors:
@@ -192,7 +188,6 @@ fields:
   institution_number:
     label: "Institution number"
     type: "financial_identifier"
-    required: false
     max_value_fragments: 2
     description: "A Canadian-style financial institution number printed on the cheque or embedded in the MICR line."
     anchors:
@@ -207,7 +202,6 @@ fields:
   micr_line:
     label: "MICR line"
     type: "financial_identifier"
-    required: false
     max_value_fragments: 6
     description: "The machine-readable cheque number, transit/routing, institution, and account number line near the bottom of the cheque."
     anchors:

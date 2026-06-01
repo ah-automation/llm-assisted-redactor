@@ -67,6 +67,63 @@ def make_run_paths(config, image_path):
     }
 
 
+def get_redacted_field_ids(valid_boxes):
+    return {
+        box.get("field_id")
+        for box in valid_boxes
+        if isinstance(box, dict) and box.get("field_id")
+    }
+
+
+def group_is_satisfied(group, redacted_field_ids):
+    any_of = group.get("any_of") or []
+    all_of = group.get("all_of") or []
+
+    any_of_satisfied = bool(any_of) and any(field_id in redacted_field_ids for field_id in any_of)
+    all_of_satisfied = bool(all_of) and all(field_id in redacted_field_ids for field_id in all_of)
+
+    if any_of and all_of:
+        return any_of_satisfied or all_of_satisfied
+    if any_of:
+        return any_of_satisfied
+    if all_of:
+        return all_of_satisfied
+    return True
+
+
+def get_review_result(document_definition, valid_boxes):
+    review_config = document_definition.get("review") or {}
+    required_fields = review_config.get("required_fields") or []
+    required_groups = review_config.get("required_groups") or []
+    redacted_field_ids = {
+        field_id
+        for field_id in get_redacted_field_ids(valid_boxes)
+        if field_id
+    }
+
+    missing_fields = sorted(
+        field_id for field_id in required_fields if field_id not in redacted_field_ids
+    )
+    missing_groups = [
+        {
+            "id": group.get("id"),
+            "label": group.get("label"),
+            "any_of": group.get("any_of") or [],
+            "all_of": group.get("all_of") or [],
+        }
+        for group in required_groups
+        if not group_is_satisfied(group, redacted_field_ids)
+    ]
+
+    needs_review = bool(missing_fields or missing_groups)
+    return {
+        "status": "needs_review" if needs_review else "passed",
+        "missing_fields": missing_fields,
+        "missing_groups": missing_groups,
+        "redacted_fields": sorted(redacted_field_ids),
+    }
+
+
 def redact_image_file(image_path, config_path, document_definition_path, document_definitions_dir):
     image_path = Path(image_path)
     config_path = Path(config_path)
@@ -209,11 +266,19 @@ def redact_image_file(image_path, config_path, document_definition_path, documen
             width,
             height,
         )
-        redact_from_matches.redact_image(image_path, redacted_path, valid_boxes)
+        review_result = get_review_result(document_definition, valid_boxes)
+        needs_review = review_result["status"] == "needs_review"
+        should_write_output = not needs_review or debug_enabled
+        if should_write_output:
+            redact_from_matches.redact_image(image_path, redacted_path, valid_boxes)
+
+        output_value = str(redacted_path) if should_write_output else None
+        manifest["output"] = output_value
+        manifest["artifacts"]["redacted_image"] = output_value
 
         manifest.update(
             {
-                "status": "completed",
+                "status": "needs_review" if needs_review else "completed",
                 "association": {
                     "field_results": field_results,
                     "valid_matches": valid_matches,
@@ -239,8 +304,12 @@ def redact_image_file(image_path, config_path, document_definition_path, documen
                     "detection_count": len(face_boxes),
                     "error": face_error,
                 },
+                "review": {
+                    **review_result,
+                    "partial_output_written": bool(needs_review and should_write_output),
+                },
                 "redaction": {
-                    "status": "completed",
+                    "status": "completed" if should_write_output else "skipped_needs_review",
                     "image_size": {"width": width, "height": height},
                     "valid_boxes": valid_boxes,
                     "rejected_boxes": rejected_boxes,
@@ -256,6 +325,10 @@ def redact_image_file(image_path, config_path, document_definition_path, documen
                 manifest["status"] = "unsupported_format"
             else:
                 manifest["status"] = "error"
+        output_path = manifest.get("output")
+        if output_path and not Path(output_path).exists():
+            manifest["output"] = None
+            manifest["artifacts"]["redacted_image"] = None
         manifest.update(
             {
                 "error": str(error),
@@ -278,6 +351,7 @@ def redact_image_file(image_path, config_path, document_definition_path, documen
 def build_summary(manifest):
     redaction = manifest.get("redaction") or {}
     routing = manifest.get("routing") or {}
+    review = manifest.get("review") or {}
     return {
         "status": manifest.get("status", "error"),
         "manifest": (manifest.get("artifacts") or {}).get("manifest"),
@@ -285,6 +359,14 @@ def build_summary(manifest):
         "document_type": manifest.get("document_type"),
         "document_definition": manifest.get("document_definition"),
         "routing_status": routing.get("status"),
+        "review_status": review.get("status"),
+        "missing_review_fields": review.get("missing_fields", []),
+        "missing_review_groups": [
+            group.get("id")
+            for group in review.get("missing_groups", [])
+            if isinstance(group, dict) and group.get("id")
+        ],
+        "partial_output_written": review.get("partial_output_written", False),
         "redaction_box_count": redaction.get("valid_box_count", 0),
         "rejected_box_count": redaction.get("rejected_box_count", 0),
         "error": manifest.get("error"),
@@ -306,6 +388,12 @@ def print_verbose_summary(summary):
         print(f"Document type: {summary['document_type']}")
     if summary.get("routing_status"):
         print(f"Routing status: {summary['routing_status']}")
+    if summary.get("review_status"):
+        print(f"Review status: {summary['review_status']}")
+    if summary.get("missing_review_fields"):
+        print(f"Missing review fields: {', '.join(summary['missing_review_fields'])}")
+    if summary.get("missing_review_groups"):
+        print(f"Missing review groups: {', '.join(summary['missing_review_groups'])}")
     if summary.get("manifest"):
         print(f"Saved manifest: {summary['manifest']}")
     if summary.get("output"):

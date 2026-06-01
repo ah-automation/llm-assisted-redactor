@@ -17,7 +17,7 @@ python redact.py --image input\sample.png --config config.yaml
 By default, stdout is a compact JSON summary suitable for automation tools:
 
 ```json
-{"status":"completed","manifest":"logs\\...","output":"output\\...","document_type":"passport.common"}
+{"status":"completed","manifest":"logs\\...","output":"output\\...","document_type":"passport.common","review_status":"passed"}
 ```
 
 For manual troubleshooting, use:

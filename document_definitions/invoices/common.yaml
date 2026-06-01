@@ -35,6 +35,11 @@ repeat_detection:
     - "invoice_number"
     - "payment_reference"
 
+review:
+  required_fields:
+    - "customer_name"
+    - "customer_address"
+
 fragment_tags:
   field_label:
     label: "Printed field label"
@@ -58,7 +63,6 @@ fields:
   customer_name:
     label: "Customer name"
     type: "text"
-    required: true
     max_value_fragments: 2
     description: "The individual customer, client, patient, tenant, or recipient name shown on the invoice."
     anchors:
@@ -76,7 +80,6 @@ fields:
   customer_address:
     label: "Customer address"
     type: "text"
-    required: true
     max_value_fragments: 4
     description: "The address belonging to the billed customer, recipient, account holder, patient, or client. Prefer an address near the customer name. Do not choose the vendor, remittance, payment, lockbox, or return address."
     anchors:
@@ -93,7 +96,6 @@ fields:
   shipping_address:
     label: "Shipping address"
     type: "text"
-    required: false
     max_value_fragments: 4
     description: "The customer's shipping, service, or delivery address, when different from the billing/customer address. Do not choose the vendor, remittance, payment, lockbox, or return address."
     anchors:
@@ -107,7 +109,6 @@ fields:
   email:
     label: "Email address"
     type: "text"
-    required: false
     description: "The customer's email address."
     anchors:
       - "Email"
@@ -119,7 +120,6 @@ fields:
   phone:
     label: "Phone number"
     type: "text"
-    required: false
     description: "The customer's phone or contact number. Do not select vendor, support, payment, help desk, sales, or customer service phone numbers."
     anchors:
       - "Phone"
@@ -133,7 +133,6 @@ fields:
   account_number:
     label: "Account number"
     type: "document_metadata"
-    required: false
     description: "A customer account, client account, or billing account identifier."
     anchors:
       - "Account"
@@ -148,7 +147,6 @@ fields:
   customer_number:
     label: "Customer number"
     type: "document_metadata"
-    required: false
     description: "A customer, client, patient, or recipient identifier."
     anchors:
       - "Customer No"
@@ -164,7 +162,6 @@ fields:
   invoice_number:
     label: "Invoice number"
     type: "document_metadata"
-    required: false
     description: "The invoice, statement, bill, order, or work order identifier."
     anchors:
       - "Invoice No"
@@ -181,7 +178,6 @@ fields:
   payment_reference:
     label: "Payment reference"
     type: "document_metadata"
-    required: false
     description: "A payment reference, payment code, or remittance identifier."
     anchors:
       - "Payment reference"

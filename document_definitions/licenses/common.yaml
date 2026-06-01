@@ -37,6 +37,21 @@ repeat_detection:
     - "date_of_birth"
     - "reference_number"
 
+review:
+  required_fields:
+    - "license_number"
+    - "address"
+    - "date_of_birth"
+    - "sex"
+  required_groups:
+    - id: "holder_name"
+      label: "Cardholder name"
+      any_of:
+        - "name_full"
+      all_of:
+        - "surname"
+        - "given_names"
+
 fragment_tags:
   field_label:
     label: "Printed field label"
@@ -73,7 +88,6 @@ fields:
   license_number:
     label: "Driver's license or ID number"
     type: "text"
-    required: true
     description: "The driver's license, ID card, customer, or document number."
     anchors:
       - "Driver's license number"
@@ -93,7 +107,6 @@ fields:
   name_full:
     label: "Full name"
     type: "text"
-    required: true
     max_value_fragments: 3
     description: "The full visible cardholder name when the name appears as one combined field."
     anchors:
@@ -107,7 +120,6 @@ fields:
   surname:
     label: "Surname or last name"
     type: "text"
-    required: false
     description: "The cardholder's surname, family name, or last name when shown separately."
     anchors:
       - "Surname"
@@ -120,7 +132,6 @@ fields:
   given_names:
     label: "Given names or first name"
     type: "text"
-    required: false
     max_value_fragments: 2
     description: "The cardholder's given names or first name when shown separately."
     anchors:
@@ -134,7 +145,6 @@ fields:
   address:
     label: "Address"
     type: "text"
-    required: true
     max_value_fragments: 4
     description: "The cardholder's residential, mailing, or street address."
     anchors:
@@ -148,7 +158,6 @@ fields:
   date_of_birth:
     label: "Date of birth"
     type: "text"
-    required: true
     description: "The cardholder's date of birth."
     anchors:
       - "Date of birth"
@@ -161,7 +170,6 @@ fields:
   issue_date:
     label: "Issue date"
     type: "document_metadata"
-    required: false
     description: "The date the driver's license or ID card was issued."
     anchors:
       - "Issue date"
@@ -174,7 +182,6 @@ fields:
   expiry_date:
     label: "Expiry date"
     type: "document_metadata"
-    required: false
     description: "The date the driver's license or ID card expires."
     anchors:
       - "Expiry date"
@@ -189,7 +196,6 @@ fields:
   sex:
     label: "Sex"
     type: "text"
-    required: true
     description: "The cardholder's sex or gender marker."
     anchors:
       - "Sex"
@@ -200,7 +206,6 @@ fields:
   height:
     label: "Height"
     type: "text"
-    required: false
     description: "The cardholder's height measurement."
     anchors:
       - "Height"
@@ -212,7 +217,6 @@ fields:
   eye_color:
     label: "Eye color"
     type: "text"
-    required: false
     description: "The cardholder's eye color, when present."
     anchors:
       - "Eyes"
@@ -225,7 +229,6 @@ fields:
   reference_number:
     label: "Reference or document reference number"
     type: "document_metadata"
-    required: false
     description: "A card-specific reference, document discriminator, DD, or REF number that identifies the physical license card or card issuance."
     anchors:
       - "REF"
