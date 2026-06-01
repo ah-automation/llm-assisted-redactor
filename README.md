@@ -64,6 +64,8 @@ You also need:
 - `config.yaml` updated with the model name served by LM Studio
 - Optional face detection model at `models/face_detection_yunet_2023mar.onnx` when face detection is enabled
 
+The project requires a local chat-completions endpoint. LM Studio is the tested setup; it uses an OpenAI-compatible API format but runs locally on your machine. Other local runtimes may work if they support compatible chat completions and structured JSON responses.
+
 ## Configuration
 
 The default runtime settings live in `config.yaml`.
@@ -154,6 +156,7 @@ Normal manifests avoid storing OCR text and raw LLM responses. Debug mode is use
 - OCR quality strongly affects results.
 - Handwriting is not a primary target.
 - Very dense documents can exceed local model context limits.
+- Barcodes and QR codes are not detected or redacted.
 - Local LLM behavior depends on the model, context size, and LM Studio settings.
 - Redaction is best-effort and should be reviewed before relying on it.
 - This project is a POC, not a compliance-certified redaction product.

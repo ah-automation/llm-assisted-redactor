@@ -18,7 +18,6 @@ document_definitions/
   passports/
     common.yaml
     netherlands.yaml
-    thai.yaml
 ```
 
 ## Common And Extended Definitions
@@ -167,7 +166,6 @@ Passports:
 
 - common passport biographical data page fields
 - Netherlands-specific extension
-- Thai-specific extension
 
 Licenses:
 
