@@ -39,9 +39,10 @@ def get_llm_config(config):
 def iter_routable_definition_paths(definitions_dir):
     definitions_dir = Path(definitions_dir)
     for path in sorted(definitions_dir.rglob("*.yaml")):
-        raw_definition = associate_fields.load_yaml(path)
-        routing = raw_definition.get("routing") or {}
-        if routing.get("enabled", False):
+        document_definition = associate_fields.load_document_definition(path)
+        routing = document_definition.get("routing") or {}
+        markers = routing.get("markers") or {}
+        if markers.get("strong") or markers.get("weak"):
             yield path
 
 

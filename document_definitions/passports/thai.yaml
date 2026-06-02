@@ -1,4 +1,4 @@
-extends: "common.yaml"
+﻿extends: "common.yaml"
 
 id: "passport.thai"
 label: "Thai passport"
@@ -7,23 +7,6 @@ description: "Thai passport biographical data page and adjacent endorsement page
 document_hints:
   - "Thai passport samples may show a duplicate passport number vertically on an adjacent page."
   - "OCR may misread some English labels around Thai text."
-
-fragment_tags:
-  field_label:
-    text_contains_add:
-      - "passportno"
-      - "pussport no"
-      - "sumame"
-      - "name inthai"
-      - "nationalty"
-      - "date of bih"
-      - "1denifconno"
-      - "identification no"
-      - "sex/"
-      - "heigh"
-      - "place ofbirh"
-      - "date of issue"
-      - "date ofexpiry"
 
 field_overrides:
   passport_number:
@@ -71,7 +54,6 @@ field_overrides:
 fields:
   passport_number_cover:
     label: "Passport number on endorsement page"
-    type: "text"
     description: "Duplicate passport number printed vertically on the adjacent endorsement page."
     anchors:
       - "Passport No"
@@ -79,17 +61,12 @@ fields:
     match_hints:
       - "Use the vertical passport number near the vertical Passport No label on the endorsement page."
       - "Do not use the horizontal passport number on the biographical data page for this field."
-    redaction:
-      mode: "ocr_box"
 
   identification_number:
     label: "Identification number"
-    type: "text"
     description: "National identification number printed on the passport."
     anchors:
       - "Identification No"
       - "1denifconNo"
     match_hints:
       - "Use the long numeric value near the identification number label."
-    redaction:
-      mode: "ocr_box"

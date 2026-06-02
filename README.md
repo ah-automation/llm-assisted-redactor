@@ -66,6 +66,8 @@ You also need:
 
 The project requires a local chat-completions endpoint. LM Studio is the tested setup; it uses an OpenAI-compatible API format but runs locally on your machine. Other local runtimes may work if they support compatible chat completions and structured JSON responses.
 
+Tested primarily with `google/gemma-4-26b-a4b` in LM Studio. Other local instruction models may work if they support the OpenAI-compatible chat completions API and reliably return strict JSON, but they have not been validated for this project.
+
 ## Configuration
 
 The default runtime settings live in `config.yaml`.

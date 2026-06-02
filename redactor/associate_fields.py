@@ -40,7 +40,10 @@ def merge_dicts(base, override):
 
 def apply_field_overrides(document_definition):
     fields = fields_to_map(document_definition.get("fields", {}))
-    field_defaults = document_definition.get("field_defaults", {})
+    field_defaults = merge_dicts(
+        {"max_value_fragments": 1},
+        document_definition.get("field_defaults", {}),
+    )
 
     for field_id, field in fields.items():
         fields[field_id] = merge_dicts(field_defaults, field)
@@ -64,13 +67,9 @@ def apply_additions(document_definition):
     extend_list(routing_markers, "strong", "strong_add")
     extend_list(routing_markers, "weak", "weak_add")
 
-    for tag_rule in (document_definition.get("fragment_tags") or {}).values():
-        extend_list(tag_rule, "text_contains", "text_contains_add")
-
     for field in fields_to_map(document_definition.get("fields", {})).values():
         extend_list(field, "anchors", "anchors_add")
         extend_list(field, "match_hints", "match_hints_add")
-        extend_list(field, "excluded_fragment_tags", "excluded_fragment_tags_add")
 
     return document_definition
 
@@ -186,7 +185,6 @@ def build_field_association_prompt(document_definition, field, ocr_manifest):
         "field": {
             "id": field.get("id"),
             "label": field.get("label"),
-            "type": field.get("type"),
             "description": field.get("description"),
             "anchors": field.get("anchors", []),
             "match_hints": field.get("match_hints", []),
@@ -335,27 +333,20 @@ def parse_matches(raw_response):
     return matches
 
 
-def get_repeat_detection_config(document_definition):
-    repeat_detection = document_definition.get("repeat_detection") or {}
-    if not isinstance(repeat_detection, dict):
-        return {}
-    return repeat_detection
+def get_repeat_detection_field_ids(fields_by_id):
+    return {
+        field_id
+        for field_id, field in fields_by_id.items()
+        if field.get("repeat_detection", False)
+    }
 
 
-def is_repeat_detection_enabled(document_definition):
-    return bool(get_repeat_detection_config(document_definition).get("enabled", False))
-
-
-def build_known_repeat_fields(document_definition, matches, fields_by_id, fragments_by_id):
-    repeat_config = get_repeat_detection_config(document_definition)
-    configured_field_ids = repeat_config.get("field_ids") or []
-    allowed_field_ids = set(configured_field_ids)
-
+def build_known_repeat_fields(matches, fields_by_id, fragments_by_id, repeat_field_ids):
     known_fields = []
     for match in matches:
         field_id = match.get("field_id")
         value_ids = match.get("value_fragment_ids", [])
-        if allowed_field_ids and field_id not in allowed_field_ids:
+        if field_id not in repeat_field_ids:
             continue
         if not value_ids:
             continue
@@ -383,14 +374,15 @@ def build_known_repeat_fields(document_definition, matches, fields_by_id, fragme
 
 
 def find_repeat_matches(config, document_definition, ocr_manifest, valid_matches, fields_by_id, fragments_by_id):
-    if not is_repeat_detection_enabled(document_definition):
+    repeat_field_ids = get_repeat_detection_field_ids(fields_by_id)
+    if not repeat_field_ids:
         return [], {
             "enabled": False,
             "status": "skipped",
-            "reason": "Repeat detection is not enabled for this document definition.",
+            "reason": "No fields have repeat_detection enabled.",
         }
 
-    known_fields = build_known_repeat_fields(document_definition, valid_matches, fields_by_id, fragments_by_id)
+    known_fields = build_known_repeat_fields(valid_matches, fields_by_id, fragments_by_id, repeat_field_ids)
     matched_value_ids = {
         fragment_id
         for match in valid_matches
@@ -412,6 +404,7 @@ def find_repeat_matches(config, document_definition, ocr_manifest, valid_matches
         "enabled": True,
         "status": "started",
         "known_field_count": len(known_fields),
+        "configured_field_ids": sorted(repeat_field_ids),
         "remaining_fragment_count": len(remaining_fragments),
         "excluded_anchor_fragment_count": len(matched_anchor_ids),
     }
@@ -505,18 +498,6 @@ def clean_json_response(raw_response):
     return text
 
 
-def get_fragment_tags(document_definition, fragment):
-    text = str(fragment.get("text", "")).casefold()
-    tags = []
-
-    for tag, rule in (document_definition.get("fragment_tags") or {}).items():
-        text_contains = [str(value).casefold() for value in rule.get("text_contains", [])]
-        if any(value in text for value in text_contains):
-            tags.append(tag)
-
-    return tags
-
-
 def is_number(value):
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
@@ -566,7 +547,6 @@ def validate_matches(
     matches,
     fields_by_id,
     fragments_by_id,
-    document_definition,
     disallowed_value_ids=None,
     include_notes=False,
 ):
@@ -618,26 +598,6 @@ def validate_matches(
                 }
             )
             continue
-
-        excluded_tags = set(fields_by_id[field_id].get("excluded_fragment_tags", []))
-        original_value_ids = list(value_ids)
-        if excluded_tags:
-            value_ids = [
-                fragment_id
-                for fragment_id in value_ids
-                if not excluded_tags.intersection(get_fragment_tags(document_definition, fragments_by_id[fragment_id]))
-            ]
-            if original_value_ids and not value_ids:
-                rejected_matches.append(
-                    {
-                        "index": index,
-                        "field_id": field_id,
-                        "error": "Only excluded fragments were selected as values.",
-                        "excluded_fragment_tags": sorted(excluded_tags),
-                        "value_fragment_ids": original_value_ids,
-                    }
-                )
-                continue
 
         value_ids = limit_value_fragments(value_ids, anchor_ids, fields_by_id[field_id], fragments_by_id)
 
@@ -783,7 +743,6 @@ def main():
             matches,
             fields_by_id,
             fragments_by_id,
-            document_definition,
             include_notes=debug_enabled,
         )
         repeat_matches, repeat_result = find_repeat_matches(
@@ -798,7 +757,6 @@ def main():
             repeat_matches,
             fields_by_id,
             fragments_by_id,
-            document_definition,
             include_notes=debug_enabled,
             disallowed_value_ids={
                 fragment_id

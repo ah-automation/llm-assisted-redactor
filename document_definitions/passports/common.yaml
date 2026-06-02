@@ -1,10 +1,8 @@
-id: "passport.common"
+﻿id: "passport.common"
 label: "Passport"
 description: "Common OCR text fields for passport biographical data pages."
 
 routing:
-  enabled: true
-  threshold: 6
   markers:
     strong:
       - "Passport"
@@ -34,42 +32,9 @@ review:
     - "date_of_expiry"
     - "mrz"
 
-fragment_tags:
-  mrz:
-    label: "Machine-readable zone text"
-    text_contains:
-      - "<"
-  field_label:
-    label: "Printed field label"
-    text_contains:
-      - "passport no"
-      - "passport number"
-      - "surname"
-      - "family name"
-      - "last name"
-      - "given names"
-      - "given name"
-      - "first name"
-      - "nationality"
-      - "date of birth"
-      - "dob"
-      - "place of birth"
-      - "sex"
-      - "height"
-      - "date of issue"
-      - "issue date"
-      - "date of expiry"
-      - "expiry date"
-      - "date of expiration"
-      - "expiration"
-
-field_defaults:
-  max_value_fragments: 1
-
 fields:
   passport_number:
     label: "Passport or document number"
-    type: "text"
     description: "The passport, travel document, or document number printed in the main biographical data area."
     anchors:
       - "Passport No"
@@ -77,104 +42,72 @@ fields:
       - "Document No"
       - "Document number"
       - "Travel document number"
-    redaction:
-      mode: "ocr_box"
 
   surname:
     label: "Surname"
-    type: "text"
     description: "The holder's family name or surname."
     anchors:
       - "Surname"
       - "Family name"
       - "Last name"
-    redaction:
-      mode: "ocr_box"
 
   given_names:
     label: "Given names"
-    type: "text"
     description: "The holder's given name or names."
     anchors:
       - "Given names"
       - "Given name"
       - "First name"
-    redaction:
-      mode: "ocr_box"
 
   nationality:
     label: "Nationality"
-    type: "text"
-    max_value_fragments: 1
     description: "The holder's nationality."
     anchors:
       - "Nationality"
-    redaction:
-      mode: "ocr_box"
 
   date_of_birth:
     label: "Date of birth"
-    type: "text"
     description: "The holder's date of birth."
     anchors:
       - "Date of birth"
       - "DOB"
-    redaction:
-      mode: "ocr_box"
 
   sex:
     label: "Sex"
-    type: "text"
     description: "The holder's sex or gender marker."
     anchors:
       - "Sex"
-    redaction:
-      mode: "ocr_box"
 
   height:
     label: "Height"
-    type: "text"
     description: "The holder's height, when present."
     anchors:
       - "Height"
-    redaction:
-      mode: "ocr_box"
 
   place_of_birth:
     label: "Place of birth"
-    type: "text"
     description: "The holder's place of birth."
     anchors:
       - "Place of birth"
-    redaction:
-      mode: "ocr_box"
 
   date_of_issue:
     label: "Date of issue"
-    type: "text"
     description: "The date the passport was issued."
     anchors:
       - "Date of issue"
       - "Issue date"
-    redaction:
-      mode: "ocr_box"
 
   date_of_expiry:
     label: "Date of expiry"
-    type: "text"
     description: "The date the passport expires."
     anchors:
       - "Date of expiry"
       - "Expiry date"
       - "Date of expiration"
-    redaction:
-      mode: "ocr_box"
 
   mrz:
     label: "Machine-readable zone"
-    type: "mrz"
     max_value_fragments: 99
-    excluded_fragment_tags: []
     description: "The machine-readable zone containing passport data."
     anchors:
       - "Machine-readable zone"
@@ -183,5 +116,3 @@ fields:
       - "Usually two lines near the bottom."
       - "Often contains many < characters."
       - "Choose fragments with machine-readable text such as < characters."
-    redaction:
-      mode: "ocr_box"

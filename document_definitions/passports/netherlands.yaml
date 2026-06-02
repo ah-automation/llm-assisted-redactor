@@ -7,33 +7,6 @@ description: "Netherlands passport biographical data page."
 document_hints:
   - "Netherlands passports may include Dutch, English, and French labels."
 
-fragment_tags:
-  field_label:
-    text_contains_add:
-      - "documentnummer"
-      - "documentno"
-      - "no.dudocument"
-      - "naam"
-      - "voornamen"
-      - "givennames"
-      - "prenoms"
-      - "nationaliteit"
-      - "nationalite"
-      - "geboortedatum"
-      - "dateofbirth"
-      - "datedenaissance"
-      - "geboorteplaats"
-      - "lieu de naissance"
-      - "geslacht"
-      - "sexe"
-      - "lengte"
-      - "taille"
-      - "datumvanafgifte"
-      - "dateof issue"
-      - "datededelivrance"
-      - "geldig tot"
-      - "date d'expiration"
-
 field_overrides:
   passport_number:
     anchors_add:

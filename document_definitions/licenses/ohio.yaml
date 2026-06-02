@@ -5,7 +5,6 @@ label: "Ohio driver's license"
 description: "Ohio-specific driver's license fields and routing hints."
 
 routing:
-  enabled: true
   markers:
     strong_add:
       - "Ohio"

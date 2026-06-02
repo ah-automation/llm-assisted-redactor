@@ -1,10 +1,8 @@
-id: "invoice.common"
+﻿id: "invoice.common"
 label: "Invoice"
 description: "Common OCR text fields for invoices, statements, bills, and order invoices."
 
 routing:
-  enabled: true
-  threshold: 6
   markers:
     strong:
       - "Invoice"
@@ -23,46 +21,15 @@ routing:
       - "Payment reference"
       - "Due date"
 
-repeat_detection:
-  enabled: true
-  field_ids:
-    - "customer_name"
-    - "shipping_address"
-    - "email"
-    - "phone"
-    - "account_number"
-    - "customer_number"
-    - "invoice_number"
-    - "payment_reference"
-
 review:
   required_fields:
     - "customer_name"
     - "customer_address"
 
-fragment_tags:
-  field_label:
-    label: "Printed field label"
-    text_contains:
-      - "bill to"
-      - "ship to"
-      - "customer"
-      - "client"
-      - "account"
-      - "invoice"
-      - "statement"
-      - "email"
-      - "phone"
-      - "payment reference"
-      - "reference"
-
-field_defaults:
-  max_value_fragments: 1
-
 fields:
   customer_name:
     label: "Customer name"
-    type: "text"
+    repeat_detection: true
     max_value_fragments: 2
     description: "The individual customer, client, patient, tenant, or recipient name shown on the invoice."
     anchors:
@@ -74,12 +41,9 @@ fields:
       - "Client name"
       - "Patient"
       - "Recipient"
-    redaction:
-      mode: "ocr_box"
 
   customer_address:
     label: "Customer address"
-    type: "text"
     max_value_fragments: 4
     description: "The address belonging to the billed customer, recipient, account holder, patient, or client. Prefer an address near the customer name. Do not choose the vendor, remittance, payment, lockbox, or return address."
     anchors:
@@ -90,12 +54,10 @@ fields:
       - "Client address"
       - "Service address"
       - "Account holder"
-    redaction:
-      mode: "ocr_box"
 
   shipping_address:
     label: "Shipping address"
-    type: "text"
+    repeat_detection: true
     max_value_fragments: 4
     description: "The customer's shipping, service, or delivery address, when different from the billing/customer address. Do not choose the vendor, remittance, payment, lockbox, or return address."
     anchors:
@@ -103,23 +65,19 @@ fields:
       - "Shipping address"
       - "Service address"
       - "Delivery address"
-    redaction:
-      mode: "ocr_box"
 
   email:
     label: "Email address"
-    type: "text"
+    repeat_detection: true
     description: "The customer's email address."
     anchors:
       - "Email"
       - "E-mail"
       - "Contact email"
-    redaction:
-      mode: "ocr_box"
 
   phone:
     label: "Phone number"
-    type: "text"
+    repeat_detection: true
     description: "The customer's phone or contact number. Do not select vendor, support, payment, help desk, sales, or customer service phone numbers."
     anchors:
       - "Phone"
@@ -127,12 +85,10 @@ fields:
       - "Tel"
       - "Contact"
       - "Mobile"
-    redaction:
-      mode: "ocr_box"
 
   account_number:
     label: "Account number"
-    type: "document_metadata"
+    repeat_detection: true
     description: "A customer account, client account, or billing account identifier."
     anchors:
       - "Account"
@@ -141,12 +97,10 @@ fields:
       - "Acct"
       - "Acct No"
       - "Billing account"
-    redaction:
-      mode: "ocr_box"
 
   customer_number:
     label: "Customer number"
-    type: "document_metadata"
+    repeat_detection: true
     description: "A customer, client, patient, or recipient identifier."
     anchors:
       - "Customer No"
@@ -156,12 +110,10 @@ fields:
       - "Client ID"
       - "Patient ID"
       - "Recipient ID"
-    redaction:
-      mode: "ocr_box"
 
   invoice_number:
     label: "Invoice number"
-    type: "document_metadata"
+    repeat_detection: true
     description: "The invoice, statement, bill, order, or work order identifier."
     anchors:
       - "Invoice No"
@@ -172,12 +124,10 @@ fields:
       - "Order No"
       - "Order number"
       - "Work Order"
-    redaction:
-      mode: "ocr_box"
 
   payment_reference:
     label: "Payment reference"
-    type: "document_metadata"
+    repeat_detection: true
     description: "A payment reference, payment code, or remittance identifier."
     anchors:
       - "Payment reference"
@@ -185,5 +135,3 @@ fields:
       - "Reference"
       - "Remittance"
       - "Payment code"
-    redaction:
-      mode: "ocr_box"

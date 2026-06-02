@@ -10,6 +10,7 @@ import traceback
 from uuid import uuid4
 
 from redactor import associate_fields
+from redactor import document_definition_validator
 from redactor import document_router
 from redactor import face_detect
 from redactor import ocr_image
@@ -202,6 +203,7 @@ def redact_image_file(image_path, config_path, document_definition_path, documen
                 )
             routing_result["enabled"] = True
 
+        document_definition_validator.require_valid_document_definition(document_definition_path)
         document_definition = associate_fields.load_document_definition(document_definition_path)
         manifest["routing"] = routing_result
         manifest["document_definition"] = str(document_definition_path)
@@ -219,7 +221,6 @@ def redact_image_file(image_path, config_path, document_definition_path, documen
             matches,
             fields_by_id,
             fragments_by_id,
-            document_definition,
             include_notes=debug_enabled,
         )
         repeat_matches, repeat_result = associate_fields.find_repeat_matches(
@@ -234,7 +235,6 @@ def redact_image_file(image_path, config_path, document_definition_path, documen
             repeat_matches,
             fields_by_id,
             fragments_by_id,
-            document_definition,
             include_notes=debug_enabled,
         )
         text_redaction_boxes = associate_fields.build_redaction_boxes(valid_matches, fragments_by_id, fields_by_id)
@@ -323,6 +323,8 @@ def redact_image_file(image_path, config_path, document_definition_path, documen
         if status in {"started", "completed"}:
             if isinstance(error, UnsupportedInputFormatError):
                 manifest["status"] = "unsupported_format"
+            elif isinstance(error, document_definition_validator.DocumentDefinitionValidationError):
+                manifest["status"] = "definition_error"
             else:
                 manifest["status"] = "error"
         output_path = manifest.get("output")
@@ -335,6 +337,8 @@ def redact_image_file(image_path, config_path, document_definition_path, documen
                 "error_type": type(error).__name__,
             }
         )
+        if isinstance(error, document_definition_validator.DocumentDefinitionValidationError):
+            manifest["definition_errors"] = error.errors
         redact_from_matches.save_json(manifest_path, manifest)
         raise RedactionRunError(manifest, error) from error
 
@@ -371,6 +375,7 @@ def build_summary(manifest):
         "rejected_box_count": redaction.get("rejected_box_count", 0),
         "error": manifest.get("error"),
         "error_type": manifest.get("error_type"),
+        "definition_errors": manifest.get("definition_errors", []),
     }
 
 
@@ -405,6 +410,10 @@ def print_verbose_summary(summary):
         print(f"Redaction boxes: {summary['redaction_box_count']}")
     if summary.get("error"):
         print(f"Error: {summary['error']}")
+    if summary.get("definition_errors"):
+        print("Definition errors:")
+        for error in summary["definition_errors"]:
+            print(f"- {error}")
 
 
 def main():

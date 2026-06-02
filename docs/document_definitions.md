@@ -50,11 +50,10 @@ The inheritance model is intentionally simple:
 
 ## Routing
 
-Definitions can opt into automatic routing:
+Definitions participate in automatic routing when they provide routing markers:
 
 ```yaml
 routing:
-  enabled: true
   markers:
     strong:
       - "Passport"
@@ -66,7 +65,7 @@ routing:
 
 When `redact.py` is called without `--document-definition`, OCR snippets and routing markers are sent to the local LLM. The LLM chooses one supported definition or returns an unsupported/ambiguous status.
 
-Markers should be conceptual signals, not exhaustive regex-style rules.
+Markers should be conceptual signals, not exhaustive regex-style rules. Extended definitions inherit parent routing markers and can add variant-specific markers with `strong_add` or `weak_add`.
 
 ## Fields
 
@@ -78,24 +77,32 @@ Example:
 fields:
   date_of_birth:
     label: "Date of birth"
-    type: "text"
     description: "The holder's date of birth."
     anchors:
       - "Date of birth"
       - "DOB"
-    redaction:
-      mode: "ocr_box"
 ```
 
 Important properties:
 
 - `label`: human-readable field name
-- `type`: simple category such as `text` or `mrz`
 - `description`: conceptual explanation for the LLM
 - `anchors`: labels or headings associated with the field
 - `match_hints`: extra guidance for difficult fields
-- `max_value_fragments`: number of OCR fragments the LLM may choose
-- `redaction.mode`: currently `ocr_box`
+- `max_value_fragments`: optional cap when a value may span more than one OCR fragment; default is `1`
+- `repeat_detection`: optional `true`/`false` flag for fields that may appear again without a clear label; default is `false`
+
+Text fields use OCR boxes and solid black rectangles by default.
+
+Optional field-level redaction settings:
+
+```yaml
+redaction:
+  trim_leading_token_lengths:
+    - 3
+```
+
+`trim_leading_token_lengths` trims a leading all-caps token from a selected OCR box when OCR combines a short label/code and the value into one fragment. Use it only for document-specific cleanup after testing.
 
 ## Review Policy
 
@@ -137,36 +144,29 @@ Supported additive patterns include:
 
 - `anchors_add`
 - `match_hints_add`
-- `excluded_fragment_tags_add`
 
-## Fragment Tags
+## Validation
 
-Fragment tags mark OCR fragments with simple local rules before they reach validation.
+Validate a document definition before using it in the main pipeline:
 
-Example:
-
-```yaml
-fragment_tags:
-  mrz:
-    label: "Machine-readable zone text"
-    text_contains:
-      - "<"
+```powershell
+python -m redactor.document_definition_validator --definition document_definitions\licenses\common.yaml
 ```
 
-Tags are useful when a document has known regions or special text patterns, such as passport MRZ lines.
+The validator loads inherited definitions, checks the supported YAML shape, and confirms review fields/groups reference known field ids.
 
 ## Repeat Detection
 
 Some document definitions enable a second LLM pass:
 
 ```yaml
-repeat_detection:
-  enabled: true
-  field_ids:
-    - "license_number"
+fields:
+  license_number:
+    label: "Driver's license number"
+    repeat_detection: true
 ```
 
-This pass only looks for repeats or near-repeats of values already matched in the first pass. It should not discover unrelated new PII categories.
+This pass only looks for repeats or near-repeats of values already matched in the first pass for fields with `repeat_detection: true`. It should not discover unrelated new PII categories.
 
 This is useful for documents where the same identifier appears in more than one place, sometimes without a nearby label.
 
