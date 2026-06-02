@@ -444,6 +444,7 @@ def main():
 
     try:
         if args.verbose:
+            print("[INFO] Running OCR and local LLM checks. This may take a few minutes...")
             outputs = redact_image_file(
                 args.image,
                 args.config,

@@ -52,12 +52,14 @@ def build_llm_route_candidates(definitions_dir):
         document_definition = associate_fields.load_document_definition(path)
         routing = document_definition.get("routing") or {}
         markers = routing.get("markers") or {}
+        definition_scope = "common_family" if path.name == "common.yaml" else "specific_variant"
         candidates.append(
             {
                 "document_definition": str(path),
                 "document_type": document_definition.get("id"),
                 "label": document_definition.get("label"),
                 "description": document_definition.get("description"),
+                "definition_scope": definition_scope,
                 "markers": {
                     "strong": markers.get("strong", []),
                     "weak": markers.get("weak", []),
@@ -169,6 +171,8 @@ def route_document_with_llm(config, ocr_manifest, definitions_dir):
     }
     prompt = (
         "Select the best document type. Markers are conceptual and OCR may contain typos, missing spaces, or merged words.\n"
+        "Common-family definitions are valid fallback choices. If a document matches a family but no specific variant fits, choose the common-family definition.\n"
+        "Choose a specific-variant definition only when OCR evidence supports that variant.\n"
         "Use document_type and document_definition exactly from the provided list.\n"
         "If no type fits, use status unsupported_document and empty strings for document_type/document_definition.\n"
         "If more than one type fits equally, use status ambiguous_document and empty strings for document_type/document_definition.\n"
