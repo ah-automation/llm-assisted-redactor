@@ -195,6 +195,8 @@ def build_field_association_prompt(document_definition, field, ocr_manifest):
 
     return (
         "Match one document field to OCR fragments. Return valid JSON only. Use ids only; never transcribe PII.\n"
+        "Copy OCR fragment ids exactly as written; do not shorten, normalize, correct, or alter them.\n"
+        "For example, ocr_0017 must remain ocr_0017, not ocr_017.\n"
         "OCR text may have typos, missing spaces, extra numbers, or multiple languages.\n"
         "Anchors are conceptual labels, not exact text. First choose label ids for anchor_fragment_ids.\n"
         "Then choose the nearest sensible value ids for value_fragment_ids, usually right of or below the label.\n"
@@ -221,6 +223,8 @@ def build_repeat_detection_prompt(document_definition, known_fields, remaining_f
 
     return (
         "Find repeats of already matched field values. Return valid JSON only. Use ids only; never transcribe PII.\n"
+        "Copy OCR fragment ids exactly as written; do not shorten, normalize, correct, or alter them.\n"
+        "For example, ocr_0017 must remain ocr_0017, not ocr_017.\n"
         "Do not discover new PII categories. Select only remaining fragments that are repeats or near-repeats of known_fields.\n"
         "Repeats may be unlabeled, smaller, vertical, low confidence, or slightly misread by OCR.\n"
         "Return one match per repeated occurrence. Each value_fragment_ids array should contain one repeated id.\n"
@@ -571,21 +575,19 @@ def validate_matches(
             rejected_matches.append({"index": index, "field_id": field_id, "error": "Fragment ids must be lists."})
             continue
 
-        unknown_ids = sorted(
-            fragment_id
-            for fragment_id in value_ids + anchor_ids
-            if fragment_id not in fragment_ids
-        )
-        if unknown_ids:
+        unknown_value_ids = sorted(fragment_id for fragment_id in value_ids if fragment_id not in fragment_ids)
+        if unknown_value_ids:
             rejected_matches.append(
                 {
                     "index": index,
                     "field_id": field_id,
-                    "error": "Unknown fragment ids.",
-                    "unknown_fragment_ids": unknown_ids,
+                    "error": "Unknown value fragment ids.",
+                    "unknown_fragment_ids": unknown_value_ids,
                 }
             )
             continue
+
+        anchor_ids = [fragment_id for fragment_id in anchor_ids if fragment_id in fragment_ids]
 
         disallowed_ids = sorted(fragment_id for fragment_id in value_ids if fragment_id in disallowed_value_ids)
         if disallowed_ids:

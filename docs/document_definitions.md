@@ -63,9 +63,9 @@ routing:
       - "Date of birth"
 ```
 
-When `redact.py` is called without `--document-definition`, OCR snippets and routing markers are sent to the local LLM. The LLM chooses one supported definition or returns an unsupported/ambiguous status.
+When `redact.py` is called without `--document-definition`, OCR snippets and routing markers are sent to the local LLM. Routing happens in two stages: first the LLM chooses a document family from each folder's `common.yaml`, then it optionally chooses a variant from that same folder.
 
-Markers should be conceptual signals, not exhaustive regex-style rules. Extended definitions inherit parent routing markers and can add variant-specific markers with `strong_add` or `weak_add`.
+Markers should be conceptual signals, not exhaustive regex-style rules. Extended definitions participate in variant routing only when they add variant-specific markers with `strong_add` or `weak_add`. If no variant clearly matches, the family `common.yaml` is used.
 
 ## Fields
 

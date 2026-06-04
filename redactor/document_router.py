@@ -36,36 +36,55 @@ def get_llm_config(config):
     return config["llm"]
 
 
-def iter_routable_definition_paths(definitions_dir):
+def has_routing_markers(path):
+    raw_definition = associate_fields.load_yaml(path)
+    routing = raw_definition.get("routing") or {}
+    markers = routing.get("markers") or {}
+    marker_keys = ("strong", "weak", "strong_add", "weak_add")
+    return any(markers.get(key) for key in marker_keys)
+
+
+def build_route_candidate(path, scope):
+    document_definition = associate_fields.load_document_definition(path)
+    routing = document_definition.get("routing") or {}
+    markers = routing.get("markers") or {}
+    return {
+        "document_definition": str(path),
+        "document_type": document_definition.get("id"),
+        "label": document_definition.get("label"),
+        "description": document_definition.get("description"),
+        "definition_scope": scope,
+        "markers": {
+            "strong": markers.get("strong", []),
+            "weak": markers.get("weak", []),
+        },
+    }
+
+
+def build_family_route_candidates(definitions_dir):
+    candidates = []
     definitions_dir = Path(definitions_dir)
-    for path in sorted(definitions_dir.rglob("*.yaml")):
-        document_definition = associate_fields.load_document_definition(path)
-        routing = document_definition.get("routing") or {}
-        markers = routing.get("markers") or {}
-        if markers.get("strong") or markers.get("weak"):
-            yield path
+    for path in sorted(definitions_dir.glob("*/common.yaml")):
+        if has_routing_markers(path):
+            candidates.append(build_route_candidate(path, "common_family"))
+    return candidates
+
+
+def build_variant_route_candidates(common_definition_path):
+    common_definition_path = Path(common_definition_path)
+    candidates = [build_route_candidate(common_definition_path, "common_family")]
+    for path in sorted(common_definition_path.parent.glob("*.yaml")):
+        if path.name == "common.yaml":
+            continue
+        if has_routing_markers(path):
+            candidates.append(build_route_candidate(path, "specific_variant"))
+    return candidates
 
 
 def build_llm_route_candidates(definitions_dir):
     candidates = []
-    for path in iter_routable_definition_paths(definitions_dir):
-        document_definition = associate_fields.load_document_definition(path)
-        routing = document_definition.get("routing") or {}
-        markers = routing.get("markers") or {}
-        definition_scope = "common_family" if path.name == "common.yaml" else "specific_variant"
-        candidates.append(
-            {
-                "document_definition": str(path),
-                "document_type": document_definition.get("id"),
-                "label": document_definition.get("label"),
-                "description": document_definition.get("description"),
-                "definition_scope": definition_scope,
-                "markers": {
-                    "strong": markers.get("strong", []),
-                    "weak": markers.get("weak", []),
-                },
-            }
-        )
+    for family_candidate in build_family_route_candidates(definitions_dir):
+        candidates.extend(build_variant_route_candidates(family_candidate["document_definition"]))
     return candidates
 
 
@@ -161,8 +180,7 @@ def parse_llm_route(raw_response):
     return parsed
 
 
-def route_document_with_llm(config, ocr_manifest, definitions_dir):
-    candidates = build_llm_route_candidates(definitions_dir)
+def route_with_candidates(config, ocr_manifest, definitions_dir, candidates, stage, instructions):
     confidence_threshold = get_confidence_threshold(config)
     request = {
         "ocr_text_snippets": ocr_text_snippets(ocr_manifest),
@@ -170,9 +188,8 @@ def route_document_with_llm(config, ocr_manifest, definitions_dir):
         "confidence_threshold": confidence_threshold,
     }
     prompt = (
-        "Select the best document type. Markers are conceptual and OCR may contain typos, missing spaces, or merged words.\n"
-        "Common-family definitions are valid fallback choices. If a document matches a family but no specific variant fits, choose the common-family definition.\n"
-        "Choose a specific-variant definition only when OCR evidence supports that variant.\n"
+        f"{instructions}\n"
+        "Markers are conceptual and OCR may contain typos, missing spaces, or merged words.\n"
         "Use document_type and document_definition exactly from the provided list.\n"
         "If no type fits, use status unsupported_document and empty strings for document_type/document_definition.\n"
         "If more than one type fits equally, use status ambiguous_document and empty strings for document_type/document_definition.\n"
@@ -182,6 +199,7 @@ def route_document_with_llm(config, ocr_manifest, definitions_dir):
     raw_response, diagnostic = call_llm_router(config, prompt)
     result = {
         "status": "started",
+        "stage": stage,
         "definitions_dir": str(definitions_dir),
         "candidate_count": len(candidates),
         "confidence_threshold": confidence_threshold,
@@ -243,3 +261,79 @@ def route_document_with_llm(config, ocr_manifest, definitions_dir):
         return None, result
 
     return Path(selected_path), result
+
+
+def route_document_with_llm(config, ocr_manifest, definitions_dir):
+    family_candidates = build_family_route_candidates(definitions_dir)
+    family_path, family_result = route_with_candidates(
+        config,
+        ocr_manifest,
+        definitions_dir,
+        family_candidates,
+        "family",
+        (
+            "Select the best document family. Each candidate is a common-family definition. "
+            "Use unsupported_document only when none of the document families fit the OCR snippets."
+        ),
+    )
+    if family_path is None:
+        family_result["routing_strategy"] = "family_then_variant"
+        return None, family_result
+
+    variant_candidates = build_variant_route_candidates(family_path)
+    if len(variant_candidates) == 1:
+        family_result.update(
+            {
+                "routing_strategy": "family_then_variant",
+                "family_routing": family_result.copy(),
+                "variant_routing": {
+                    "status": "skipped",
+                    "reason": "No variant definitions with routing markers are available for this family.",
+                    "candidate_count": 1,
+                },
+            }
+        )
+        return family_path, family_result
+
+    variant_path, variant_result = route_with_candidates(
+        config,
+        ocr_manifest,
+        definitions_dir,
+        variant_candidates,
+        "variant",
+        (
+            "A document family has already been selected. Choose a specific-variant definition only when "
+            "OCR evidence clearly supports that variant. Otherwise choose the common-family definition. "
+            "Do not return unsupported_document just because a specific country, state, province, vendor, "
+            "or variant definition is missing."
+        ),
+    )
+
+    if variant_path is None:
+        selected_path = family_path
+        selected_definition = associate_fields.load_document_definition(selected_path)
+        combined_result = {
+            "status": "completed",
+            "routing_strategy": "family_then_variant",
+            "definitions_dir": str(definitions_dir),
+            "candidate_count": len(family_candidates) + len(variant_candidates),
+            "confidence_threshold": get_confidence_threshold(config),
+            "selected_document_type": selected_definition.get("id"),
+            "selected_document_definition": str(selected_path),
+            "confidence": family_result.get("confidence", 0.0),
+            "reason": "Variant routing did not select a specific variant; using the common-family definition."
+            if is_debug_enabled(config)
+            else "",
+            "family_routing": family_result,
+            "variant_routing": variant_result,
+        }
+        return selected_path, combined_result
+
+    variant_result.update(
+        {
+            "routing_strategy": "family_then_variant",
+            "family_routing": family_result,
+            "variant_routing": variant_result.copy(),
+        }
+    )
+    return variant_path, variant_result
