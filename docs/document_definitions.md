@@ -92,7 +92,7 @@ Important properties:
 - `max_value_fragments`: optional cap when a value may span more than one OCR fragment; default is `1`
 - `repeat_detection`: optional `true`/`false` flag for fields that may appear again without a clear label; default is `false`
 
-Text fields use OCR boxes and solid black rectangles by default.
+Text fields use OCR boxes and solid black rectangles by default. The pipeline intentionally redacts full OCR boxes to avoid partial-character leakage; this may over-redact nearby labels or adjacent text.
 
 Optional field-level redaction settings:
 
@@ -198,6 +198,10 @@ Licenses:
 Invoices:
 
 - customer names, addresses, account/reference fields, and contact details
+
+Credit cards:
+
+- front-of-card number, cardholder name, visible card dates, and front security code when present
 
 Cheques:
 

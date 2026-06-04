@@ -32,6 +32,7 @@ Current document definitions include:
 
 - Passports
 - Driver's licenses
+- Credit cards
 - Invoices, statements, and bills
 - Cheques
 - Health insurance cards
@@ -160,6 +161,7 @@ Normal manifests avoid storing OCR text and raw LLM responses. Debug mode is use
 - Handwriting is not a primary target.
 - Very dense documents can exceed local model context limits.
 - Barcodes and QR codes are not detected or redacted.
+- Redaction intentionally uses full OCR boxes to avoid partial-character leakage; this may over-redact nearby labels or adjacent text.
 - Local LLM behavior depends on the model, context size, and LM Studio settings.
 - Redaction is best-effort and should be reviewed before relying on it.
 - This project is a POC, not a compliance-certified redaction product.
