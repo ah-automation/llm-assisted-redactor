@@ -1,0 +1,107 @@
+id: "credit_card.common"
+label: "Credit card"
+description: "Common OCR-readable fields for the front of credit, debit, prepaid, and payment card images."
+
+routing:
+  markers:
+    strong:
+      - "Credit card"
+      - "Debit card"
+      - "Valid thru"
+      - "Valid through"
+      - "Good thru"
+      - "Expires"
+      - "Cardholder"
+      - "Cardmember"
+    weak:
+      - "Visa"
+      - "Mastercard"
+      - "American Express"
+      - "Discover"
+      - "Debit"
+      - "Credit"
+      - "Member since"
+      - "Valid from"
+
+document_hints:
+  - "This definition targets the front of payment cards only."
+  - "Do not redact issuer names, bank names, card network logos, slogans, or generic product labels unless selected as configured fields."
+  - "The card number may be the largest number on the card and may not have a nearby text label."
+
+review:
+  required_fields:
+    - "card_number"
+
+fields:
+  card_number:
+    label: "Payment card number"
+    repeat_detection: true
+    max_value_fragments: 5
+    description: "The primary credit, debit, prepaid, or payment card number printed on the front of the card."
+    anchors:
+      - "Card number"
+      - "Account number"
+      - "Primary account number"
+      - "PAN"
+    match_hints:
+      - "Often appears as the largest grouped number on the card front."
+      - "May be split into groups of digits, such as four groups of four digits."
+      - "When adjacent digit groups form the card number, include every card-number digit group as value_fragment_ids."
+      - "Do not use a card-number digit group as an anchor."
+      - "May have no nearby label; choose the card-number-looking value when it is clearly the payment card number."
+      - "Do not choose dates, customer service phone numbers, issuer numbers, or small legal text."
+
+  cardholder_name:
+    label: "Cardholder name"
+    repeat_detection: true
+    max_value_fragments: 3
+    description: "The personal or business name printed on the front of the card."
+    anchors:
+      - "Cardholder"
+      - "Cardholder name"
+      - "Cardmember"
+      - "Cardmember name"
+      - "Name"
+    match_hints:
+      - "Prefer a name near the lower front area of the card."
+      - "Do not choose the issuer name, bank name, card network name, or card product name."
+
+  card_dates:
+    label: "Card dates"
+    repeat_detection: true
+    max_value_fragments: 6
+    description: "Any date printed on the front of the card, including expiry, valid-from, valid-through, good-thru, or member-since dates."
+    anchors:
+      - "Valid"
+      - "Valid thru"
+      - "Valid through"
+      - "Good thru"
+      - "Expires"
+      - "Expiry"
+      - "Exp"
+      - "Expiration date"
+      - "Valid from"
+      - "Valid since"
+      - "From"
+      - "Issue date"
+      - "Issued"
+      - "Member since"
+      - "Member from"
+      - "Since"
+    match_hints:
+      - "Redact any visible card date."
+      - "Card dates are often in MM/YY or MM/YYYY format."
+      - "If a malformed label appears attached to a card date, redact the date portion only when OCR separates it clearly."
+
+  front_security_code:
+    label: "Front security code"
+    description: "A card verification or security code printed on the front of the card, when present."
+    anchors:
+      - "CID"
+      - "CVC"
+      - "CVV"
+      - "Security code"
+      - "Card identification number"
+    match_hints:
+      - "Some cards print a short verification code on the front."
+      - "Do not choose ordinary dates or grouped card-number fragments."
