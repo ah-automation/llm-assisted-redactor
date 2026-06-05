@@ -39,6 +39,19 @@ review:
         - "surname"
         - "given_names"
 
+fallback_detection:
+  opaque_identifier:
+    enabled: true
+    label: "Opaque machine-readable identifier"
+    max_value_fragments: 3
+    description: "A long opaque identifier, side number, audit number, vertical number, or machine-readable string printed on the driver's license."
+    match_hints:
+      - "Run only on OCR fragments that were not already matched by configured fields."
+      - "Redact long standalone alphanumeric strings that appear to be machine-readable identifiers."
+      - "These may appear vertically along an edge of the card."
+      - "Prefer strings containing 8 or more letters/digits."
+      - "Do not choose names, addresses, ordinary dates by themselves, heights, eye color, class, or short labels."
+
 fields:
   license_number:
     label: "Driver's license or ID number"

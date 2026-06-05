@@ -67,7 +67,16 @@ You also need:
 
 The project requires a local chat-completions endpoint. LM Studio is the tested setup; it uses an OpenAI-compatible API format but runs locally on your machine. Other local runtimes may work if they support compatible chat completions and structured JSON responses.
 
-Tested primarily with `google/gemma-4-26b-a4b` in LM Studio. Other local instruction models may work if they support the OpenAI-compatible chat completions API and reliably return strict JSON, but they have not been validated for this project.
+Recommended model: `google/gemma-4-26b-a4b` in LM Studio. The prompts and document definitions have been tuned around this model. Other local instruction models may work if they support the OpenAI-compatible chat completions API and reliably return strict JSON, but they should be treated as unvalidated until tested against the project examples.
+
+Recommended LM Studio setup:
+
+- Start the local OpenAI-compatible server.
+- Load `google/gemma-4-26b-a4b`.
+- Set the context length to at least `4096`; larger values may help dense documents but should be tested for speed and stability.
+- Disable thinking/reasoning mode for this workflow.
+- Use temperature `0`.
+- Make sure `llm.model` in `config.yaml` exactly matches the model name served by LM Studio.
 
 ## Configuration
 
@@ -163,6 +172,7 @@ Normal manifests avoid storing OCR text and raw LLM responses. Debug mode is use
 - Barcodes and QR codes are not detected or redacted.
 - Redaction intentionally uses full OCR boxes to avoid partial-character leakage; this may over-redact nearby labels or adjacent text.
 - Local LLM behavior depends on the model, context size, and LM Studio settings.
+- Model changes may require prompt and document-definition retesting.
 - Redaction is best-effort and should be reviewed before relying on it.
 - This project is a POC, not a compliance-certified redaction product.
 

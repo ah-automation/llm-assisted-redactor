@@ -237,14 +237,31 @@ def redact_image_file(image_path, config_path, document_definition_path, documen
             fragments_by_id,
             include_notes=debug_enabled,
         )
+        fallback_matches, fallback_result = associate_fields.find_fallback_matches(
+            config,
+            document_definition,
+            ocr_manifest_for_processing,
+            valid_matches + valid_repeat_matches,
+        )
+        fallback_fields_by_id = associate_fields.get_enabled_fallback_detectors(document_definition)
+        valid_fallback_matches, rejected_fallback_matches = associate_fields.validate_matches(
+            fallback_matches,
+            fallback_fields_by_id,
+            fragments_by_id,
+            include_notes=debug_enabled,
+        )
         text_redaction_boxes = associate_fields.build_redaction_boxes(valid_matches, fragments_by_id, fields_by_id)
         repeat_redaction_boxes = associate_fields.build_redaction_boxes(
             valid_repeat_matches,
             fragments_by_id,
             fields_by_id,
         )
-        text_redaction_boxes.extend(repeat_redaction_boxes)
-        redaction_boxes = list(text_redaction_boxes)
+        fallback_redaction_boxes = associate_fields.build_redaction_boxes(
+            valid_fallback_matches,
+            fragments_by_id,
+            fallback_fields_by_id,
+        )
+        redaction_boxes = list(text_redaction_boxes) + repeat_redaction_boxes + fallback_redaction_boxes
 
         face_boxes = []
         face_error = None
@@ -296,6 +313,15 @@ def redact_image_file(image_path, config_path, document_definition_path, documen
                     "valid_match_count": len(valid_repeat_matches),
                     "rejected_match_count": len(rejected_repeat_matches),
                     "redaction_box_count": len(repeat_redaction_boxes),
+                },
+                "fallback_detection": {
+                    **fallback_result,
+                    "valid_matches": valid_fallback_matches,
+                    "rejected_matches": rejected_fallback_matches,
+                    "redaction_boxes": fallback_redaction_boxes,
+                    "valid_match_count": len(valid_fallback_matches),
+                    "rejected_match_count": len(rejected_fallback_matches),
+                    "redaction_box_count": len(fallback_redaction_boxes),
                 },
                 "face_detection": {
                     "enabled": face_detect.is_enabled(config),

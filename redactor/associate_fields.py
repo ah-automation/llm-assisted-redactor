@@ -235,6 +235,31 @@ def build_repeat_detection_prompt(document_definition, known_fields, remaining_f
     )
 
 
+def build_fallback_detection_prompt(document_definition, fallback_detectors, remaining_fragments):
+    request = {
+        "document": {
+            "id": document_definition.get("id"),
+            "label": document_definition.get("label"),
+            "description": document_definition.get("description"),
+            "hints": document_definition.get("document_hints", []),
+        },
+        "fallback_detectors": fallback_detectors,
+        "remaining_ocr_fragments": [compact_fragment(fragment) for fragment in remaining_fragments],
+    }
+
+    return (
+        "Run fallback detection on remaining OCR fragments only. Return valid JSON only. Use ids only; never transcribe PII.\n"
+        "Copy OCR fragment ids exactly as written; do not shorten, normalize, correct, or alter them.\n"
+        "Do not select fragments already absent from remaining_ocr_fragments.\n"
+        "Select only fragments that clearly match one configured fallback detector.\n"
+        "This is a conservative final pass, not general PII discovery. If unsure, return {\"matches\":[]}.\n"
+        "Use anchor_fragment_ids only for a nearby label; otherwise [].\n"
+        'Return shape: {"matches":[{"field_id":"opaque_identifier","value_fragment_ids":["ocr_0001"],"anchor_fragment_ids":[],"confidence":0.0,"notes":"short non-PII reason"}]}\n'
+        "Input JSON:\n"
+        f"{json.dumps(request, separators=(',', ':'))}"
+    )
+
+
 def call_llm(config, prompt):
     llm_config = get_llm_config(config)
     client = OpenAI(
@@ -377,6 +402,35 @@ def build_known_repeat_fields(matches, fields_by_id, fragments_by_id, repeat_fie
     return known_fields
 
 
+def get_enabled_fallback_detectors(document_definition):
+    fallback_detection = document_definition.get("fallback_detection") or {}
+    if not isinstance(fallback_detection, dict):
+        return {}
+
+    detectors = {}
+    for detector_id, detector in fallback_detection.items():
+        if not isinstance(detector, dict):
+            continue
+        if not detector.get("enabled", False):
+            continue
+        detector_copy = dict(detector)
+        detector_copy.pop("enabled", None)
+        detector_copy["id"] = detector_id
+        detector_copy.setdefault("max_value_fragments", 1)
+        detectors[detector_id] = detector_copy
+
+    return detectors
+
+
+def selected_fragment_ids(matches):
+    return {
+        fragment_id
+        for match in matches
+        for key in ("value_fragment_ids", "anchor_fragment_ids")
+        for fragment_id in match.get(key, [])
+    }
+
+
 def find_repeat_matches(config, document_definition, ocr_manifest, valid_matches, fields_by_id, fragments_by_id):
     repeat_field_ids = get_repeat_detection_field_ids(fields_by_id)
     if not repeat_field_ids:
@@ -423,6 +477,72 @@ def find_repeat_matches(config, document_definition, ocr_manifest, valid_matches
         return [], result
 
     prompt = build_repeat_detection_prompt(document_definition, known_fields, remaining_fragments)
+    raw_response, diagnostic = call_llm(config, prompt)
+    result["llm_diagnostic"] = diagnostic
+
+    try:
+        matches = parse_matches(raw_response)
+        result.update(
+            {
+                "status": "completed",
+                "match_count": len(matches),
+            }
+        )
+        return matches, result
+    except (json.JSONDecodeError, ValueError) as error:
+        result.update(
+            {
+                "status": "llm_response_error",
+                "error": "LLM response was not valid JSON in the expected shape.",
+                "error_details": str(error),
+            }
+        )
+        add_raw_response_if_debug(result, config, raw_response)
+        return [], result
+
+
+def find_fallback_matches(config, document_definition, ocr_manifest, prior_matches):
+    fallback_detectors = get_enabled_fallback_detectors(document_definition)
+    if not fallback_detectors:
+        return [], {
+            "enabled": False,
+            "status": "skipped",
+            "reason": "No fallback detectors are enabled.",
+        }
+
+    already_selected_ids = selected_fragment_ids(prior_matches)
+    remaining_fragments = [
+        fragment
+        for fragment in ocr_manifest.get("fragments", [])
+        if fragment.get("id") not in already_selected_ids
+    ]
+    detector_prompt_items = [
+        {
+            "id": detector_id,
+            "label": detector.get("label"),
+            "description": detector.get("description"),
+            "match_hints": detector.get("match_hints", []),
+            "max_value_fragments": detector.get("max_value_fragments", 1),
+        }
+        for detector_id, detector in fallback_detectors.items()
+    ]
+    result = {
+        "enabled": True,
+        "status": "started",
+        "configured_detector_ids": sorted(fallback_detectors),
+        "remaining_fragment_count": len(remaining_fragments),
+    }
+
+    if not remaining_fragments:
+        result.update(
+            {
+                "status": "skipped",
+                "reason": "No remaining OCR fragments were available for fallback detection.",
+            }
+        )
+        return [], result
+
+    prompt = build_fallback_detection_prompt(document_definition, detector_prompt_items, remaining_fragments)
     raw_response, diagnostic = call_llm(config, prompt)
     result["llm_diagnostic"] = diagnostic
 
@@ -766,11 +886,29 @@ def main():
                 for fragment_id in match.get("anchor_fragment_ids", [])
             },
         )
+        fallback_matches, fallback_result = find_fallback_matches(
+            config,
+            document_definition,
+            ocr_manifest,
+            valid_matches + valid_repeat_matches,
+        )
+        fallback_fields_by_id = get_enabled_fallback_detectors(document_definition)
+        valid_fallback_matches, rejected_fallback_matches = validate_matches(
+            fallback_matches,
+            fallback_fields_by_id,
+            fragments_by_id,
+            include_notes=debug_enabled,
+        )
         redaction_boxes = build_redaction_boxes(valid_matches, fragments_by_id, fields_by_id)
         repeat_redaction_boxes = build_redaction_boxes(valid_repeat_matches, fragments_by_id, fields_by_id)
-        redaction_boxes.extend(repeat_redaction_boxes)
+        fallback_redaction_boxes = build_redaction_boxes(
+            valid_fallback_matches,
+            fragments_by_id,
+            fallback_fields_by_id,
+        )
+        all_redaction_boxes = redaction_boxes + repeat_redaction_boxes + fallback_redaction_boxes
         if debug_enabled:
-            save_match_overlay(image_path, overlay_path, redaction_boxes)
+            save_match_overlay(image_path, overlay_path, all_redaction_boxes)
 
         manifest.update(
             {
@@ -786,10 +924,19 @@ def main():
                     "rejected_match_count": len(rejected_repeat_matches),
                     "redaction_box_count": len(repeat_redaction_boxes),
                 },
-                "redaction_boxes": redaction_boxes,
+                "fallback_detection": {
+                    **fallback_result,
+                    "valid_matches": valid_fallback_matches,
+                    "rejected_matches": rejected_fallback_matches,
+                    "redaction_boxes": fallback_redaction_boxes,
+                    "valid_match_count": len(valid_fallback_matches),
+                    "rejected_match_count": len(rejected_fallback_matches),
+                    "redaction_box_count": len(fallback_redaction_boxes),
+                },
+                "redaction_boxes": all_redaction_boxes,
                 "valid_match_count": len(valid_matches),
                 "rejected_match_count": len(rejected_matches),
-                "redaction_box_count": len(redaction_boxes),
+                "redaction_box_count": len(all_redaction_boxes),
             }
         )
         if debug_enabled:

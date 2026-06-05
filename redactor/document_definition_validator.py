@@ -17,6 +17,7 @@ TOP_LEVEL_KEYS = {
     "fields",
     "field_overrides",
     "field_defaults",
+    "fallback_detection",
 }
 
 FIELD_KEYS = {
@@ -193,6 +194,45 @@ def validate_review(errors, review, field_ids):
                 errors.append(f"{group_path} references unknown field id: {field_id}.")
 
 
+def validate_fallback_detection(errors, fallback_detection):
+    if fallback_detection is None:
+        return
+    if not isinstance(fallback_detection, dict):
+        errors.append("fallback_detection must be an object.")
+        return
+
+    allowed_detector_keys = {
+        "enabled",
+        "label",
+        "description",
+        "match_hints",
+        "max_value_fragments",
+    }
+    for detector_id, detector in fallback_detection.items():
+        detector_path = f"fallback_detection.{detector_id}"
+        if not isinstance(detector, dict):
+            errors.append(f"{detector_path} must be an object.")
+            continue
+
+        add_unknown_key_errors(errors, detector_path, detector, allowed_detector_keys)
+        enabled = detector.get("enabled")
+        if enabled is not None and not isinstance(enabled, bool):
+            errors.append(f"{detector_path}.enabled must be true or false.")
+        if enabled is False:
+            continue
+        if not is_non_empty_string(detector.get("label")):
+            errors.append(f"{detector_path}.label must be a non-empty string.")
+        if not is_non_empty_string(detector.get("description")):
+            errors.append(f"{detector_path}.description must be a non-empty string.")
+        validate_string_list(errors, f"{detector_path}.match_hints", detector.get("match_hints"))
+
+        max_value_fragments = detector.get("max_value_fragments")
+        if max_value_fragments is not None and (
+            not isinstance(max_value_fragments, int) or max_value_fragments < 1
+        ):
+            errors.append(f"{detector_path}.max_value_fragments must be a positive integer.")
+
+
 def validate_field_overrides(errors, raw_definition, definition_path):
     overrides = raw_definition.get("field_overrides")
     if overrides is None:
@@ -265,6 +305,7 @@ def validate_document_definition(definition_path):
     fields = associate_fields.fields_to_map(document_definition.get("fields", {}))
     field_ids = validate_fields(errors, fields)
     validate_review(errors, document_definition.get("review"), field_ids)
+    validate_fallback_detection(errors, document_definition.get("fallback_detection"))
 
     valid = not errors
     return {

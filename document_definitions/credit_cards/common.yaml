@@ -31,6 +31,8 @@ document_hints:
 review:
   required_fields:
     - "card_number"
+    - "cardholder_name"
+    - "card_dates"
 
 fields:
   card_number:
@@ -49,6 +51,7 @@ fields:
       - "When adjacent digit groups form the card number, include every card-number digit group as value_fragment_ids."
       - "Do not use a card-number digit group as an anchor."
       - "May have no nearby label; choose the card-number-looking value when it is clearly the payment card number."
+      - "Do not choose a standalone 3- or 4-digit number as the card number unless it is adjacent to other card-number digit groups."
       - "Do not choose dates, customer service phone numbers, issuer numbers, or small legal text."
 
   cardholder_name:

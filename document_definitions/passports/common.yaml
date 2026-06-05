@@ -32,6 +32,19 @@ review:
     - "date_of_expiry"
     - "mrz"
 
+fallback_detection:
+  opaque_identifier:
+    enabled: true
+    label: "Opaque passport identifier"
+    max_value_fragments: 3
+    description: "A long opaque identifier, control number, booklet number, vertical number, perforated number, or machine-readable string printed on the passport page."
+    match_hints:
+      - "Run only on OCR fragments that were not already matched by configured fields."
+      - "Redact long standalone alphanumeric strings that appear to be passport control, booklet, perforated, or machine-readable identifiers."
+      - "These may appear near page edges, near a photo, or away from normal labeled fields."
+      - "Prefer strings containing 8 or more letters/digits."
+      - "Do not choose names, nationality, ordinary dates by themselves, place names, country names, labels, or decorative/security text."
+
 fields:
   passport_number:
     label: "Passport or document number"

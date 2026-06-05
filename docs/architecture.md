@@ -71,6 +71,8 @@ This keeps localization deterministic:
 - The LLM supplies document-aware association.
 - Python validates and draws the final redactions.
 
+The recommended model for this POC is `google/gemma-4-26b-a4b` through LM Studio. Model behavior is part of the system design: changing the model, quantization, context size, runtime settings, or prompts may change routing and field-association behavior. For a real deployment, the model, prompts, runtime configuration, document definitions, and review policy would need to be versioned and validated together.
+
 ## Logging And Output
 
 Each normal run writes one manifest:
