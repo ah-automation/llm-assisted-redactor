@@ -6,16 +6,16 @@ Do not add real identity documents, real invoices, real cheques, real insurance 
 
 ## Safe Example Commands
 
-Automatic routing:
-
-```powershell
-python redact.py --image input\synthetic_passport.png --config config.yaml
-```
-
-Explicit definition:
+Explicit definition, recommended for repeatable demos:
 
 ```powershell
 python redact.py --image input\synthetic_passport.png --config config.yaml --document-definition document_definitions\passports\common.yaml
+```
+
+Automatic routing, useful for demonstrating local LLM document classification:
+
+```powershell
+python redact.py --image input\synthetic_passport.png --config config.yaml
 ```
 
 Verbose troubleshooting:
@@ -86,6 +86,7 @@ Good sample candidates:
 
 - synthetic passport-like image
 - synthetic driver's license-like image
+- synthetic credit card-like image
 - synthetic invoice
 - synthetic cheque
 - synthetic health insurance card

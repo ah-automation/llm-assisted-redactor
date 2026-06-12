@@ -67,6 +67,8 @@ When `redact.py` is called without `--document-definition`, OCR snippets and rou
 
 Markers should be conceptual signals, not exhaustive regex-style rules. Extended definitions participate in variant routing only when they add variant-specific markers with `strong_add` or `weak_add`. If no variant clearly matches, the family `common.yaml` is used.
 
+Automatic routing is useful for demonstrating local LLM classification, but it is model-dependent. For repeatable tests or demos, provide `--document-definition` explicitly.
+
 ## Fields
 
 A field describes one redaction target.
@@ -170,6 +172,26 @@ This pass only looks for repeats or near-repeats of values already matched in th
 
 This is useful for documents where the same identifier appears in more than one place, sometimes without a nearby label.
 
+## Fallback Detection
+
+Some document families can enable a final LLM-assisted fallback pass:
+
+```yaml
+fallback_detection:
+  opaque_identifier:
+    enabled: true
+    label: "Opaque machine-readable identifier"
+    max_value_fragments: 3
+    description: "A long opaque identifier, side number, audit number, vertical number, or machine-readable string."
+    match_hints:
+      - "Run only on OCR fragments that were not already matched by configured fields."
+      - "Redact long standalone alphanumeric strings that appear to be machine-readable identifiers."
+```
+
+Fallback detection runs after normal field association and repeat detection. It only sees OCR fragments that have not already been selected, so it is best used as a conservative family-specific safeguard for leftover opaque identifiers.
+
+This should not be used as a universal PII detector. Keep fallback detectors narrow, document-family-specific, and easy to review.
+
 ## Adding A New Document Family
 
 Suggested process:
@@ -180,6 +202,7 @@ Suggested process:
 4. Test with synthetic or safe sample images.
 5. Add field hints only where the LLM repeatedly fails.
 6. Create extended definitions only when a specific document variant needs them.
+7. Add fallback detection only when a document family has common leftover opaque identifiers.
 
 Keep YAML definitions readable. If a definition starts to become a large rule engine, step back and decide whether the field should be document-specific, out of scope, or handled by another local detector.
 

@@ -4,11 +4,11 @@ A local-first proof of concept for redacting personally identifiable information
 
 This project combines local OCR, local LLM-assisted document understanding, configurable document definitions, and simple black-box redaction. It was built as a learning project and portfolio piece for regulated-environment-friendly document processing, where images and model calls stay on the local machine.
 
-This is not production compliance software.
+This is not production compliance software. It is a constrained local POC that explores how far a small local model can be pushed with OCR, structured definitions, validation, and review gates. A production-grade solution would require stronger models, validation datasets, versioned prompts/model settings, and formal human review/compliance controls.
 
 ## What It Does
 
-The tool accepts one image, detects the document type, finds configured PII fields, and writes a redacted PNG plus a JSON manifest.
+The tool accepts one image, finds configured PII fields, and writes a redacted PNG plus a JSON manifest. It can either route the document type with the local LLM or use an explicit document definition supplied by the caller.
 
 ```powershell
 python redact.py --image input\sample.png --config config.yaml
@@ -39,17 +39,28 @@ Current document definitions include:
 
 The definitions are intentionally configurable. The goal is not one universal PII detector; it is document-aware redaction for known document types.
 
+## Recommended Demo Path
+
+For repeatable testing and portfolio demos, use an explicit document definition:
+
+```powershell
+python redact.py --image input\sample.png --config config.yaml --document-definition document_definitions\passports\common.yaml
+```
+
+Automatic routing is included to demonstrate local LLM document classification, but it is less stable than passing a known definition.
+
 ## Local-First Architecture
 
 The pipeline runs locally:
 
 1. RapidOCR extracts text fragments and coordinates.
-2. A local OpenAI-compatible LLM endpoint, initially LM Studio, routes the document type when no definition is provided.
+2. A local OpenAI-compatible LLM endpoint, initially LM Studio, optionally routes the document type when no definition is provided.
 3. The local LLM associates noisy OCR fragments with configured fields in YAML document definitions.
-4. Local validation turns accepted OCR fragments into redaction boxes.
-5. Optional local face detection redacts detected faces/photos.
-6. Pillow writes a redacted PNG using solid black rectangles.
-7. A JSON manifest records metadata, model diagnostics, selected definition, boxes, and output paths.
+4. Optional family-specific fallback detection looks for leftover opaque identifiers after known fields are handled.
+5. Local validation turns accepted OCR fragments into redaction boxes.
+6. Optional local face detection redacts detected faces/photos.
+7. Pillow writes a redacted PNG using solid black rectangles.
+8. A JSON manifest records metadata, model diagnostics, selected definition, boxes, and output paths.
 
 ## Installation
 
@@ -103,7 +114,7 @@ With automatic document routing:
 python redact.py --image input\sample.png --config config.yaml
 ```
 
-With an explicit document definition:
+With an explicit document definition, recommended for stable testing:
 
 ```powershell
 python redact.py --image input\sample.png --config config.yaml --document-definition document_definitions\passports\common.yaml
@@ -171,6 +182,7 @@ Normal manifests avoid storing OCR text and raw LLM responses. Debug mode is use
 - Very dense documents can exceed local model context limits.
 - Barcodes and QR codes are not detected or redacted.
 - Redaction intentionally uses full OCR boxes to avoid partial-character leakage; this may over-redact nearby labels or adjacent text.
+- Automatic routing is experimental and can be inconsistent; explicit document definitions are more stable.
 - Local LLM behavior depends on the model, context size, and LM Studio settings.
 - Model changes may require prompt and document-definition retesting.
 - Redaction is best-effort and should be reviewed before relying on it.
