@@ -93,6 +93,8 @@ Recommended LM Studio setup:
 - Use temperature `0`.
 - Make sure `llm.model` in `config.yaml` exactly matches the model name served by LM Studio.
 
+The bundled YuNet face detection model is MIT licensed and sourced from OpenCV Zoo. See [models/README.md](models/README.md) for attribution.
+
 ## Configuration
 
 The default runtime settings live in `config.yaml`.
