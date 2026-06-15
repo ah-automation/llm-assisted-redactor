@@ -22,9 +22,7 @@ document_definitions/
 
 ## Common And Extended Definitions
 
-Use `common.yaml` for fields shared across a document family.
-
-Use an extended YAML file when a country, region, vendor, or screen has special labels or layout behavior.
+Use `common.yaml` for fields shared across a document family. Use an extended YAML file when a country, region, vendor, or screen has special labels or layout behavior.
 
 Example:
 
@@ -41,7 +39,7 @@ field_overrides:
       - "4d NO"
 ```
 
-The inheritance model is intentionally simple:
+Inheritance is intentionally simple:
 
 - one parent through `extends`
 - child paths resolve relative to the current YAML file
@@ -67,11 +65,11 @@ When `redact.py` is called without `--document-definition`, OCR snippets and rou
 
 Markers should be conceptual signals, not exhaustive regex-style rules. Extended definitions participate in variant routing only when they add variant-specific markers with `strong_add` or `weak_add`. If no variant clearly matches, the family `common.yaml` is used.
 
-Automatic routing is useful for demonstrating local LLM classification, but it is model-dependent. For repeatable tests or demos, provide `--document-definition` explicitly.
+Automatic routing is model-dependent. For repeatable tests or demos, provide `--document-definition` explicitly.
 
 ## Fields
 
-A field describes one redaction target.
+A field describes one text redaction target.
 
 Example:
 
@@ -94,7 +92,7 @@ Important properties:
 - `max_value_fragments`: optional cap when a value may span more than one OCR fragment; default is `1`
 - `repeat_detection`: optional `true`/`false` flag for fields that may appear again without a clear label; default is `false`
 
-Text fields use OCR boxes and solid black rectangles by default. The pipeline intentionally redacts full OCR boxes to avoid partial-character leakage; this may over-redact nearby labels or adjacent text.
+Text fields use OCR boxes and solid black rectangles. Full OCR boxes are redacted to avoid partial-character leakage, which can over-redact nearby labels or adjacent text.
 
 Optional field-level redaction settings:
 
@@ -104,11 +102,11 @@ redaction:
     - 3
 ```
 
-`trim_leading_token_lengths` trims a leading all-caps token from a selected OCR box when OCR combines a short label/code and the value into one fragment. Use it only for document-specific cleanup after testing.
+`trim_leading_token_lengths` trims a leading all-caps token when OCR combines a short label/code and the value into one fragment. Use it only after testing.
 
 ## Review Policy
 
-The optional `review` section describes which redactions must succeed before a run can be considered complete.
+The optional `review` section describes which redactions must succeed.
 
 ```yaml
 review:
@@ -127,9 +125,9 @@ review:
 
 `required_fields` are individual fields that must produce at least one valid redaction box.
 
-`required_groups` handle either/or requirements. The example above passes if `name_full` is redacted, or if both `surname` and `given_names` are redacted.
+`required_groups` handle either/or requirements. The example passes if `name_full` is redacted, or if both `surname` and `given_names` are redacted.
 
-If a review requirement is not met, the run returns `needs_review` with exit code `2`. In normal mode, no redacted image is written for that run. In debug mode, a partial redacted image may be written for troubleshooting.
+If a review requirement is not met, the run returns `needs_review` with exit code `2`. In normal mode, no redacted image is written. In debug mode, a partial redacted image can be written for troubleshooting.
 
 ## Field Overrides
 
@@ -170,7 +168,7 @@ fields:
 
 This pass only looks for repeats or near-repeats of values already matched in the first pass for fields with `repeat_detection: true`. It should not discover unrelated new PII categories.
 
-This is useful for documents where the same identifier appears in more than one place, sometimes without a nearby label.
+Use this when the same identifier appears more than once, sometimes without a nearby label.
 
 ## Fallback Detection
 
@@ -188,9 +186,9 @@ fallback_detection:
       - "Redact long standalone alphanumeric strings that appear to be machine-readable identifiers."
 ```
 
-Fallback detection runs after normal field association and repeat detection. It only sees OCR fragments that have not already been selected, so it is best used as a conservative family-specific safeguard for leftover opaque identifiers.
+Fallback detection runs after field association and repeat detection. It only sees unmatched OCR fragments, so it is best used as a conservative family-specific safeguard for leftover opaque identifiers.
 
-This should not be used as a universal PII detector. Keep fallback detectors narrow, document-family-specific, and easy to review.
+Do not use it as a universal PII detector. Keep fallback detectors narrow, document-family-specific, and easy to review.
 
 ## Adding A New Document Family
 

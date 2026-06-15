@@ -3,6 +3,9 @@ __pycache__/
 .venv/
 .env
 
+AGENTS.md
+PROJECT_BRIEF.md
+
 input/*
 output/*
 logs/*

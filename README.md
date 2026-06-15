@@ -2,9 +2,15 @@
 
 A local-first proof of concept for redacting personally identifiable information from scanned or photographed document images.
 
-This project combines local OCR, local LLM-assisted document understanding, configurable document definitions, and simple black-box redaction. It was built as a learning project and portfolio piece for regulated-environment-friendly document processing, where images and model calls stay on the local machine.
+This project combines local OCR, local LLM-assisted document understanding, configurable document definitions, and black-box redaction. It was built as a learning project and portfolio piece for regulated-environment-friendly document processing, where images and model calls stay on the local machine.
 
-This is not production compliance software. It is a constrained local POC that explores how far a small local model can be pushed with OCR, structured definitions, validation, and review gates. A production-grade solution would require stronger models, validation datasets, versioned prompts/model settings, and formal human review/compliance controls.
+This is not production compliance software. A production-grade solution would require stronger models, validation datasets, versioned prompts/model settings, and formal human review/compliance controls.
+
+## Why This Exists
+
+Traditional redaction often leans on OCR, regex, configuration, and custom parsing code. Those pipelines can become brittle: one small change can cascade through the rules, and edge cases often require fuzzy judgment rather than exact matching.
+
+This project investigates whether local LLM-assisted inference can simplify that association layer while keeping documents private. It also explores what smaller local models can contribute to complex document work: they cannot compete with large frontier models on raw capability, but they offer major cost savings and can run inside private or regulated environments.
 
 ## What It Does
 
@@ -37,7 +43,7 @@ Current document definitions include:
 - Cheques
 - Health insurance cards
 
-The definitions are intentionally configurable. The goal is not one universal PII detector; it is document-aware redaction for known document types.
+The goal is not one universal PII detector; it is document-aware redaction for known document types.
 
 ## Recommended Demo Path
 
@@ -76,9 +82,7 @@ You also need:
 - `config.yaml` updated with the model name served by LM Studio
 - Optional face detection model at `models/face_detection_yunet_2023mar.onnx` when face detection is enabled
 
-The project requires a local chat-completions endpoint. LM Studio is the tested setup; it uses an OpenAI-compatible API format but runs locally on your machine. Other local runtimes may work if they support compatible chat completions and structured JSON responses.
-
-Recommended model: `google/gemma-4-26b-a4b` in LM Studio. The prompts and document definitions have been tuned around this model. Other local instruction models may work if they support the OpenAI-compatible chat completions API and reliably return strict JSON, but they should be treated as unvalidated until tested against the project examples.
+The project requires a local chat-completions endpoint. LM Studio with `google/gemma-4-26b-a4b` is the tested setup; it uses an OpenAI-compatible API format but runs locally on your machine. Other local runtimes and instruction models may work if they support compatible chat completions and reliably return strict JSON, but they should be treated as unvalidated until tested against your document set.
 
 Recommended LM Studio setup:
 
@@ -100,7 +104,7 @@ Important values:
 - `llm.temperature`: recommended `0`
 - `output_dir`: where redacted images are written
 - `logs_dir`: where manifests are written
-- `debug.enabled`: when `true`, OCR text, raw model responses, and overlays may be saved locally
+- `debug.enabled`: when `true`, assume OCR text, raw model responses, and overlays contain PII
 
 Keep `debug.enabled: false` for normal runs.
 
@@ -169,9 +173,9 @@ Output is always PNG.
 
 ## Privacy Notes
 
-Do not commit real documents, output images, debug overlays, or manifests that may contain PII.
+Do not commit real documents, output images, debug overlays, or manifests from real documents.
 
-Normal manifests avoid storing OCR text and raw LLM responses. Debug mode is useful during development, but it may save sensitive text and image overlays locally.
+Normal manifests omit OCR text and raw LLM responses. Debug mode writes troubleshooting artifacts that should be treated as containing PII when real documents are used.
 
 ## Limitations
 
@@ -186,10 +190,8 @@ Normal manifests avoid storing OCR text and raw LLM responses. Debug mode is use
 - Local LLM behavior depends on the model, context size, and LM Studio settings.
 - Model changes may require prompt and document-definition retesting.
 - Redaction is best-effort and should be reviewed before relying on it.
-- This project is a POC, not a compliance-certified redaction product.
 
 ## More Docs
 
 - [Architecture](docs/architecture.md)
 - [Document Definitions](docs/document_definitions.md)
-- [Safe Examples](examples/README.md)

@@ -2,9 +2,9 @@
 
 This project is a local OCR plus local LLM redaction pipeline for known document types.
 
-The core idea is to let OCR handle coordinates and let the LLM handle semantic association. OCR is good at saying "this text fragment is at this box." The LLM is useful for deciding whether a noisy OCR fragment belongs to a configured field such as passport number, date of birth, account number, or customer name.
+OCR supplies text fragments and coordinates. The LLM decides whether noisy OCR fragments belong to configured fields such as passport number, date of birth, account number, or customer name.
 
-The architecture is intentionally a hybrid POC. It explores what can be achieved on smaller local hardware without sending documents to hosted services. It is not the same architecture that would be chosen for a production redaction platform backed by a larger multimodal model.
+The architecture explores what can be achieved on smaller local hardware without sending documents to hosted services. It is not the same architecture that would be chosen for a production redaction platform backed by a larger multimodal model.
 
 ## Main Flow
 
@@ -46,7 +46,7 @@ Runs RapidOCR and normalizes OCR output into fragments:
 - confidence
 - text, kept in memory for processing
 
-With debug disabled, saved manifests strip OCR text and keep only metadata such as text length.
+With debug disabled, saved manifests strip OCR text and keep metadata such as text length.
 
 `redactor/document_router.py`
 
@@ -76,7 +76,7 @@ This keeps localization deterministic:
 - The LLM supplies document-aware association.
 - Python validates and draws the final redactions.
 
-The recommended model for this POC is `google/gemma-4-26b-a4b` through LM Studio. Model behavior is part of the system design: changing the model, quantization, context size, runtime settings, or prompts may change routing and field-association behavior. For a real deployment, the model, prompts, runtime configuration, document definitions, and review policy would need to be versioned and validated together.
+The recommended model is `google/gemma-4-26b-a4b` through LM Studio. Model behavior is part of the system design: changing the model, quantization, context size, runtime settings, or prompts can change routing and field association. For a real deployment, the model, prompts, runtime configuration, document definitions, and review policy would need to be versioned and validated together.
 
 Automatic routing is intentionally treated as a convenience feature. For stable tests and demos, pass `--document-definition` explicitly and let the LLM focus on field association.
 
@@ -113,9 +113,9 @@ debug:
   enabled: false
 ```
 
-When debug is off, saved manifests avoid OCR text, raw model responses, LLM notes, and visual overlays.
+When debug is off, saved manifests omit OCR text, raw model responses, LLM notes, and visual overlays.
 
-When debug is on, the pipeline may save OCR text, raw model responses, and debug images. This is useful for development but may expose sensitive document contents.
+When debug is on, the pipeline writes troubleshooting artifacts that should be treated as containing PII when real documents are used.
 
 ## Error Handling
 
@@ -125,12 +125,12 @@ The script returns:
 - exit code `1` for errors
 - exit code `2` for unsupported document, ambiguous document, low-confidence route, or review-needed statuses
 
-If a document definition's review policy is not satisfied, the manifest status is `needs_review`. In normal mode, the redacted image is not written; in debug mode, a partial redacted image may be written for troubleshooting.
+If a document definition's review policy is not satisfied, the manifest status is `needs_review`. In normal mode, the redacted image is not written; in debug mode, a partial redacted image can be written for troubleshooting.
 
 Unsupported input formats such as PDF and HEIC/HEIF fail before OCR starts and return exit code `1`.
 
 ## Current Scope
 
-The pipeline is designed for short Latin-script scanned/image documents where OCR can extract the relevant text. It is not designed for long PDFs, large multi-page records, or compliance-grade unattended redaction.
+The pipeline is designed for short Latin-script scanned/image documents where OCR can extract the relevant text. It is not designed for long PDFs, large multi-page records, or unattended compliance-grade redaction.
 
-The most realistic use of this repository is as a portfolio POC: it demonstrates local-first document processing, constrained-model tradeoffs, prompt/document-definition maintenance, validation gates, and privacy-conscious logging.
+The repository demonstrates local-first document processing, constrained-model tradeoffs, prompt/document-definition maintenance, validation gates, and privacy-conscious logging.
